@@ -2,19 +2,19 @@ use std::path::{Path, PathBuf};
 
 pub struct BlockId {
     path: PathBuf,
-    id: u64,
+    block_no: u64,
 }
 
 impl BlockId {
-    pub fn new(path: PathBuf, id: u64) -> Self {
-        Self { path, id }
+    pub fn new(path: PathBuf, block_no: u64) -> Self {
+        Self { path, block_no }
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    pub fn id(&self) -> u64 {
-        self.id
+    pub fn block_no(&self) -> u64 {
+        self.block_no
     }
 }

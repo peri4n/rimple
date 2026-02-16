@@ -1,0 +1,2 @@
+# rimple
+SimpleDB in Rust

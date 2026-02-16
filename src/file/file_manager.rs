@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
-    io::{Read, Seek, Write},
+    io::{self, Read, Seek, Write},
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -17,7 +17,7 @@ pub struct FileManager {
 }
 
 impl FileManager {
-    pub fn new(path: impl AsRef<Path>, block_size: usize) -> Self {
+    pub fn new(path: impl AsRef<Path>, block_size: usize) -> io::Result<Self> {
         let path = path.as_ref().to_path_buf();
         let is_new = !path.exists();
         if is_new {
@@ -31,49 +31,50 @@ impl FileManager {
                 std::fs::remove_file(file_path).expect("Failed to remove temporary file");
             }
         }
-        Self {
+        Ok(Self {
             block_size,
             path,
             is_new,
             open_files: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn get_file(&self, file_path: &Path) -> io::Result<File> {
+        let open_files = self
+            .open_files
+            .lock()
+            .map_err(|_| io::Error::other("Failed to acquire open files lock"))?;
+
+        if let Some(file) = open_files.get(file_path) {
+            return file.try_clone();
         }
+
+        OpenOptions::new()
+            .custom_flags(libc::O_SYNC)
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(file_path)
     }
 
-    fn get_file(&self, file_path: &Path) -> File {
-        let mut open_files = self.open_files.lock().unwrap();
-        open_files
-            .entry(file_path.to_path_buf())
-            .or_insert_with(|| {
-                OpenOptions::new()
-                    .custom_flags(libc::O_SYNC)
-                    .read(true)
-                    .write(true)
-                    .create(true)
-                    .open(file_path)
-                    .expect("Failed to open file")
-            })
-            .try_clone()
-            .expect("Failed to clone file handle")
-    }
-
-    pub fn read(&self, block_id: &BlockId, page: &mut Page) {
-        let mut file = self.get_file(block_id.path());
+    pub fn read(&self, block_id: &BlockId, page: &mut Page) -> io::Result<()> {
+        let mut file = self.get_file(block_id.path())?;
         let offset = block_id.block_no() * self.block_size as u64;
-        file.seek(std::io::SeekFrom::Start(offset))
-            .expect("Failed to seek in file");
+        file.seek(std::io::SeekFrom::Start(offset))?;
 
         let buf = page.content_mut();
-        file.read_exact(buf).expect("Failed to read from file");
+        file.read_exact(buf)?;
+        Ok(())
     }
 
-    pub fn write(&self, block_id: &BlockId, page: &Page) {
-        let mut file = self.get_file(block_id.path());
+    pub fn write(&self, block_id: &BlockId, page: &Page) -> io::Result<()> {
+        let mut file = self.get_file(block_id.path())?;
         let offset = block_id.block_no() * self.block_size as u64;
-        file.seek(std::io::SeekFrom::Start(offset))
-            .expect("Failed to seek in file");
+        file.seek(std::io::SeekFrom::Start(offset))?;
 
         let buf = page.content();
-        file.write_all(buf).expect("Failed to write to file");
+        file.write_all(buf)?;
+        Ok(())
     }
 
     pub fn block_size(&self) -> usize {
@@ -96,8 +97,7 @@ mod tests {
 
     #[test]
     fn create_a_new_database_directory() {
-        let file_mgr = FileManager::new("test_db", 4096);
+        let file_mgr = FileManager::new("test_db", 4096).expect("Failed to create FileManager");
         assert!(file_mgr.path().exists());
     }
-
 }

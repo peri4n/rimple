@@ -22,3 +22,6 @@ target
 
 # Direnv
 .direnv/
+
+# the db itself
+mydb/

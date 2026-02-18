@@ -1,5 +1,3 @@
-const I32_SIZE: usize = 4;
-
 /// TODO
 /// - Add support for other primitive types (e.g. i64, f32, f64, dates, etc.)
 /// - Add support for null-terminated strings
@@ -37,9 +35,9 @@ impl Page {
     }
 
     pub fn get_integer(&self, offset: usize) -> PageResult<i32> {
-        self.assert_offset_within_bounds(offset, I32_SIZE)?;
+        self.assert_offset_within_bounds(offset, std::mem::size_of::<i32>())?;
 
-        let bytes = &self.content[offset..offset + I32_SIZE];
+        let bytes = &self.content[offset..offset + std::mem::size_of::<i32>()];
         bytes
             .try_into()
             .map(|arr: [u8; 4]| i32::from_be_bytes(arr))
@@ -47,26 +45,28 @@ impl Page {
     }
 
     pub fn set_integer(&mut self, offset: usize, value: i32) -> PageResult<()> {
-        self.assert_offset_within_bounds(offset, I32_SIZE)?;
+        self.assert_offset_within_bounds(offset, std::mem::size_of::<i32>())?;
 
         self.content[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
         Ok(())
     }
 
     pub fn get_bytes(&self, offset: usize) -> PageResult<Vec<u8>> {
-        self.assert_offset_within_bounds(offset, I32_SIZE)?;
+        self.assert_offset_within_bounds(offset, std::mem::size_of::<i32>())?;
 
         let length = self.get_integer(offset)?;
         let length = usize::try_from(length).map_err(|_| PageError::InvalidData)?;
 
-        if offset + I32_SIZE + length > self.content.len() {
+        if offset + std::mem::size_of::<i32>() + length > self.content.len() {
             return Err(PageError::InvalidData);
         }
-        Ok(self.content[offset + I32_SIZE..offset + I32_SIZE + length].to_vec())
+        let start = offset + std::mem::size_of::<i32>();
+        let end = start + length;
+        Ok(self.content[start..end].to_vec())
     }
 
     pub fn set_bytes(&mut self, offset: usize, bytes: &[u8]) -> PageResult<()> {
-        self.assert_offset_within_bounds(offset, I32_SIZE)?;
+        self.assert_offset_within_bounds(offset, std::mem::size_of::<i32>())?;
 
         let length = bytes.len();
 
@@ -108,6 +108,10 @@ impl Page {
         } else {
             Ok(())
         }
+    }
+
+    pub(crate) fn max_length(str: &str) -> usize {
+        std::mem::size_of::<i32>() + str.len()
     }
 }
 

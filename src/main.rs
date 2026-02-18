@@ -1,4 +1,5 @@
 mod file;
+mod log;
 mod db;
 
 fn main() {

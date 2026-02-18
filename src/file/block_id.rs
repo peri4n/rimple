@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone)]
 pub struct BlockId {
     path: PathBuf,
     block_no: u64,

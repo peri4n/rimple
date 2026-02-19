@@ -116,8 +116,6 @@ impl LogManager {
         LogIterator::new(self.file_manager.clone(), self.current_block.clone())
     }
 
-
-
     fn append_new_block(&mut self) -> io::Result<BlockId> {
         let blk = self.file_manager.append_block(self.log_file.as_path())?;
         self.log_page

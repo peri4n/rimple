@@ -18,7 +18,11 @@ pub struct FileManager {
 
 impl FileManager {
     pub fn new(path: impl AsRef<Path>, block_size: usize) -> io::Result<Self> {
-        println!("Initializing FileManager with path: {:?} and block size: {}", path.as_ref(), block_size);
+        println!(
+            "Initializing FileManager with path: {:?} and block size: {}",
+            path.as_ref(),
+            block_size
+        );
         let path = path.as_ref().to_path_buf();
         let is_new = !path.exists();
         if is_new {
@@ -60,8 +64,7 @@ impl FileManager {
             .create(true)
             .open(file_path)?;
 
-        open_files
-            .insert(file_path.to_path_buf(), file.try_clone()?);
+        open_files.insert(file_path.to_path_buf(), file.try_clone()?);
         Ok(file)
     }
 

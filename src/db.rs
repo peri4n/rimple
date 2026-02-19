@@ -1,5 +1,8 @@
 use crate::{file::manager::FileManager, log::manager::LogManager};
-use std::{path::Path, sync::{Arc, Mutex}};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 pub struct SimpleDB {
     file_manager: Arc<FileManager>,
@@ -7,14 +10,19 @@ pub struct SimpleDB {
 }
 
 impl SimpleDB {
-
-        pub const LOG_FILE: &'static str = "simpledb.log";
+    pub const LOG_FILE: &'static str = "simpledb.log";
 
     pub fn new(dirname: impl AsRef<Path>, block_size: usize) -> std::io::Result<Self> {
         let file_manager = Arc::new(FileManager::new(&dirname, block_size)?);
-        let log_manager = Arc::new(Mutex::new(LogManager::new(file_manager.clone(), dirname.as_ref().join(Self::LOG_FILE))?));
+        let log_manager = Arc::new(Mutex::new(LogManager::new(
+            file_manager.clone(),
+            dirname.as_ref().join(Self::LOG_FILE),
+        )?));
 
-        Ok(SimpleDB { file_manager, log_manager })
+        Ok(SimpleDB {
+            file_manager,
+            log_manager,
+        })
     }
 
     pub fn file_manager(&self) -> &FileManager {

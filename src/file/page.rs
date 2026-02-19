@@ -222,9 +222,7 @@ mod test {
         // Write a length larger than available space (10 > 8)
         assert!(matches!(p.set_integer(0, 10), Ok(())));
         let res = p.get_bytes(0);
-        assert!(
-            matches!(res, Err(PageError::InvalidData))
-        );
+        assert!(matches!(res, Err(PageError::InvalidData)));
     }
 
     #[test]

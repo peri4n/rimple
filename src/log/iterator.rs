@@ -37,20 +37,19 @@ impl Iterator for LogIterator {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_position >= self.file_manager.block_size() && self.blk.block_no() <= 0 {
+        if self.current_position >= self.file_manager.block_size() && self.blk.block_no() == 0 {
             return None;
         }
 
         if self.current_position == self.file_manager.block_size() {
-            // Move to the previous block
-            let prev_blk = BlockId::new(self.blk.path().to_path_buf(), self.blk.block_no() - 1);
-            self.file_manager.read(&prev_blk, &mut self.page).ok()?;
+            self.blk = BlockId::new(self.blk.path().to_path_buf(), self.blk.block_no() - 1);
+            self.file_manager.read(&self.blk, &mut self.page).ok()?;
             self.boundary = self.page.get_integer(0).ok()?;
             self.current_position = self.boundary as usize;
         }
 
         let record = self.page.get_bytes(self.current_position).ok()?;
         self.current_position += std::mem::size_of::<i32>() + record.len();
-        return Some(record);
+        Some(record)
     }
 }

@@ -44,6 +44,8 @@ impl Page {
             .map_err(|_| PageError::InvalidData)
     }
 
+    // I don't believe this method can fail with InvalidData since we're just writing bytes, and
+    // the bound check is covered by usize.
     pub fn set_integer(&mut self, offset: usize, value: i32) -> PageResult<()> {
         self.assert_offset_within_bounds(offset, std::mem::size_of::<i32>())?;
 

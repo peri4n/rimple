@@ -1,10 +1,9 @@
-use std::{
-    io,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{io, path::PathBuf, sync::Arc};
 
-use crate::{file::{block_id::BlockId, manager::FileManager, page::Page}, log::iterator::LogIterator};
+use crate::{
+    file::{block_id::BlockId, manager::FileManager, page::Page},
+    log::iterator::LogIterator,
+};
 
 pub struct LogManager {
     file_manager: Arc<FileManager>,
@@ -21,19 +20,34 @@ impl LogManager {
         println!("Initializing LogManager with log file: {:?}", log_file);
         let block_size = file_manager.block_size();
         let mut log_page = Page::with_size(block_size);
+        let log_size = file_manager.size(log_file.as_path());
 
         println!("Checking if log file exists and has blocks...");
-        let current_block = if !file_manager.has_blocks(log_file.as_path()) {
+        let current_block = if log_size == 0 {
             println!("Log file doesn't exist with blocks");
-            file_manager.append_block(log_file.as_path())?
+            // append new block and initialize log page boundary
+            let blk = file_manager.append_block(log_file.as_path())?;
+            log_page
+                .set_integer(0, file_manager.block_size() as i32)
+                .map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Failed to reset log page boundary: {e}"),
+                    )
+                })?;
+            file_manager.write(&blk, &log_page)?;
+            blk
         } else {
             println!("Log file exists with blocks");
-            let block = BlockId::new(log_file.clone(), block_size as u64 - 1);
+            let block = BlockId::new(log_file.clone(), log_size - 1);
             file_manager.read(&block, &mut log_page)?;
             block
         };
 
-        println!("LogManager initialized with current block: {:?}", current_block);
+        println!(
+            "LogManager initialized with current block: {:?}",
+            current_block
+        );
         Ok(Self {
             file_manager,
             log_file,
@@ -53,9 +67,9 @@ impl LogManager {
         })? as usize;
 
         let record_size = record.len();
-        let bytes_needed = record_size + std::mem::size_of::<usize>();
+        let bytes_needed = record_size + std::mem::size_of::<i32>();
 
-        if boundary - bytes_needed < std::mem::size_of::<usize>() {
+        if boundary < std::mem::size_of::<i32>() + bytes_needed {
             // Not enough space for the record and its size
             self.flush_internal()?;
             self.current_block = self.append_new_block()?;
@@ -102,8 +116,20 @@ impl LogManager {
         LogIterator::new(self.file_manager.clone(), self.current_block.clone())
     }
 
-    fn append_new_block(&self) -> io::Result<BlockId> {
-        self.file_manager.append_block(self.log_file.as_path())
+
+
+    fn append_new_block(&mut self) -> io::Result<BlockId> {
+        let blk = self.file_manager.append_block(self.log_file.as_path())?;
+        self.log_page
+            .set_integer(0, self.file_manager.block_size() as i32)
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Failed to reset log page boundary: {e}"),
+                )
+            })?;
+        self.file_manager.write(&blk, &self.log_page)?;
+        Ok(blk)
     }
 }
 
@@ -115,7 +141,7 @@ mod test {
 
     #[test]
     fn example_run() {
-        let db = SimpleDB::new("mydb", 4096).expect("Failed to create database");
+        let db = SimpleDB::new("mydb", 400).expect("Failed to create database");
         let mut log_manager = db
             .log_manager()
             .try_lock()
@@ -146,7 +172,9 @@ mod test {
         println!("Appending log records from {} to {}", start, end);
         for i in start..=end {
             let record = create_log_record(format!("record{}", i), (i + 1000) as i32);
-            let isn = log_manager.append(&record).expect("Failed to append log record");
+            let isn = log_manager
+                .append(&record)
+                .expect("Failed to append log record");
             println!("Appended log record {} with ISN {}", i, isn);
         }
         println!()

@@ -1,3 +1,4 @@
+mod buffer;
 mod db;
 mod file;
 mod log;

@@ -1,4 +1,4 @@
-use crate::{file::manager::FileManager, log::manager::LogManager};
+use crate::{buffer::manager::BufferManager, file::manager::FileManager, log::manager::LogManager};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
@@ -7,6 +7,7 @@ use std::{
 pub struct SimpleDB {
     file_manager: Arc<FileManager>,
     log_manager: Arc<Mutex<LogManager>>,
+    buffer_manager: Arc<Mutex<BufferManager>>,
 }
 
 impl SimpleDB {
@@ -19,9 +20,16 @@ impl SimpleDB {
             dirname.as_ref().join(Self::LOG_FILE),
         )?));
 
+        let buffer_manager = Arc::new(Mutex::new(BufferManager::new(
+            file_manager.clone(),
+            log_manager.clone(),
+            8, // default number of buffers
+        )));
+
         Ok(SimpleDB {
             file_manager,
             log_manager,
+            buffer_manager,
         })
     }
 

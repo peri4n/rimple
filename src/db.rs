@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::{buffer::manager::BufferManager, file::manager::FileManager, log::manager::LogManager};
 use std::{
     path::Path,
@@ -14,6 +16,7 @@ impl SimpleDB {
     pub const LOG_FILE: &'static str = "simpledb.log";
 
     pub fn new(dirname: impl AsRef<Path>, block_size: usize) -> std::io::Result<Self> {
+        info!("Start to initialize the database in folder {:?} with block size {}", dirname.as_ref(), block_size);
         let file_manager = Arc::new(FileManager::new(&dirname, block_size)?);
         let log_manager = Arc::new(Mutex::new(LogManager::new(
             file_manager.clone(),
@@ -26,6 +29,7 @@ impl SimpleDB {
             8, // default number of buffers
         )));
 
+        info!("Database initialization done");
         Ok(SimpleDB {
             file_manager,
             log_manager,

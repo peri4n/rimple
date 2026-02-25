@@ -1,5 +1,7 @@
 use std::{io, path::PathBuf, sync::Arc};
 
+use log::{debug, trace};
+
 use crate::{
     file::{block_id::BlockId, manager::FileManager, page::Page},
     log::iterator::LogIterator,
@@ -16,16 +18,14 @@ pub struct LogManager {
 
 impl LogManager {
     pub fn new(file_manager: Arc<FileManager>, log_file: impl Into<PathBuf>) -> io::Result<Self> {
+        debug!("Start to initialize log manager");
         let log_file = log_file.into();
-        println!("Initializing LogManager with log file: {:?}", log_file);
         let block_size = file_manager.block_size();
         let mut log_page = Page::with_size(block_size);
         let log_size = file_manager.size(log_file.as_path());
 
-        println!("Checking if log file exists and has blocks...");
+        trace!("Log file at {:?} is empty. Allocating block.", log_file);
         let current_block = if log_size == 0 {
-            println!("Log file doesn't exist with blocks");
-            // append new block and initialize log page boundary
             let blk = file_manager.append_block(log_file.as_path())?;
             log_page
                 .set_integer(0, file_manager.block_size() as i32)
@@ -38,16 +38,13 @@ impl LogManager {
             file_manager.write(&blk, &log_page)?;
             blk
         } else {
-            println!("Log file exists with blocks");
+            trace!("Log file at {:?} already exists.", log_file);
             let block = BlockId::new(log_file.clone(), log_size - 1);
             file_manager.read(&block, &mut log_page)?;
             block
         };
 
-        println!(
-            "LogManager initialized with current block: {:?}",
-            current_block
-        );
+        debug!("File manager initialization done");
         Ok(Self {
             file_manager,
             log_file,

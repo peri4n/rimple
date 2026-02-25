@@ -7,6 +7,8 @@ use std::{
     sync::Mutex,
 };
 
+use log::{debug, info, trace};
+
 use crate::file::{block_id::BlockId, page::Page};
 
 pub struct FileManager {
@@ -18,45 +20,44 @@ pub struct FileManager {
 
 impl FileManager {
     pub fn new(path: impl AsRef<Path>, block_size: usize) -> io::Result<Self> {
-        println!(
-            "Initializing FileManager with path: {:?} and block size: {}",
-            path.as_ref(),
-            block_size
-        );
-        let path = path.as_ref().to_path_buf();
-        let is_new = !path.exists();
+        debug!("Start to initialize file manager");
+        let path_buf = path.as_ref().to_path_buf();
+        let is_new = !path_buf.exists();
+
         if is_new {
-            std::fs::create_dir_all(&path).expect("Failed to create directory");
+            std::fs::create_dir_all(path)?;
         }
 
-        println!("Cleaning up temporary files in directory: {:?}", path);
-        for file in path.read_dir().expect("Failed to read directory").flatten() {
+        trace!("Cleaning up temporary files in directory: {:?}", path_buf);
+        for file in path_buf.read_dir()?.flatten() {
             let file_path = file.file_name();
             if file_path.to_str().is_some_and(|s| s.starts_with("temp")) {
-                std::fs::remove_file(file_path).expect("Failed to remove temporary file");
+                std::fs::remove_file(file_path)?;
             }
         }
+
+        debug!("File manager initialization done");
         Ok(Self {
             block_size,
-            path,
+            path: path_buf,
             is_new,
             open_files: Mutex::new(HashMap::new()),
         })
     }
 
     pub(crate) fn get_file(&self, file_path: &Path) -> io::Result<File> {
-        println!("Getting file for path: {:?}", file_path);
+        debug!("Fetching file {:?}", file_path);
         let mut open_files = self
             .open_files
             .lock()
             .map_err(|_| io::Error::other("Failed to acquire open files lock"))?;
 
         if let Some(file) = open_files.get(file_path) {
-            println!("File found in cache, returning clone: {:?}", file_path);
+            trace!("File was already in cache {:?}", file_path);
             return file.try_clone();
         }
 
-        println!("File not found in cache, opening new file: {:?}", file_path);
+        trace!("File not found in cache. Creating new: {:?}", file_path);
         let file = OpenOptions::new()
             .custom_flags(libc::O_SYNC)
             .read(true)

@@ -1,9 +1,10 @@
 use std::{
-    error::Error,
     io,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+
+use log::{debug, trace};
 
 use crate::{
     buffer::buffer::Buffer,
@@ -29,6 +30,7 @@ impl BufferManager {
         log_manager: Arc<Mutex<LogManager>>,
         num_buffers: usize,
     ) -> Self {
+        debug!("Start to initialize buffer manager with {} buffers", num_buffers);
         let buffers = (0..num_buffers)
             .map(|_| {
                 Arc::new(Mutex::new(Buffer::new(
@@ -37,6 +39,8 @@ impl BufferManager {
                 )))
             })
             .collect();
+
+        debug!("Buffer manager initialization done");
         Self {
             file_manager,
             log_manager,
@@ -47,10 +51,12 @@ impl BufferManager {
     }
 
     pub fn pin(&mut self, block: &BlockId) -> Result<Arc<Mutex<Buffer>>, BufferError> {
+        debug!("Trying to pin block: {}", block);
         let deadline = Instant::now() + Duration::from_millis(self.max_time);
 
         while Instant::now() < deadline {
             if let Ok(buffer) = self.try_to_pin(block.clone()) {
+                trace!("Pinned block: {}", block);
                 return Ok(buffer);
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -60,6 +66,7 @@ impl BufferManager {
     }
 
     pub fn unpin(&mut self, buffer: &mut Buffer) {
+        debug!("Trying to pin block: {:?}", buffer.block_id());
         buffer.unpin();
         if !buffer.is_pinned() {
             self.available += 1;
@@ -73,7 +80,7 @@ impl BufferManager {
     pub fn flush_all(&mut self, txn: i32) -> io::Result<()> {
         for buffer in &mut self.pool {
             let mut buffer = buffer.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "Failed to acquire buffer lock")
+                io::Error::other("Failed to acquire buffer lock")
             })?;
             if buffer.modifying_txn() == txn {
                 buffer.flush()?;

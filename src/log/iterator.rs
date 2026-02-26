@@ -50,6 +50,6 @@ impl Iterator for LogIterator {
 
         let record = self.page.get_bytes(self.current_position).ok()?;
         self.current_position += std::mem::size_of::<i32>() + record.len();
-        Some(record)
+        Some(record.to_vec())
     }
 }

@@ -24,8 +24,8 @@ impl LogManager {
         let mut log_page = Page::with_size(block_size);
         let log_size = file_manager.size(log_file.as_path());
 
-        trace!("Log file at {:?} is empty. Allocating block.", log_file);
         let current_block = if log_size == 0 {
+            trace!("Log file at {:?} is empty. Allocating block.", log_file);
             let blk = file_manager.append_block(log_file.as_path())?;
             log_page
                 .set_integer(0, file_manager.block_size() as i32)
@@ -44,7 +44,7 @@ impl LogManager {
             block
         };
 
-        debug!("File manager initialization done");
+        debug!("Log manager initialization done");
         Ok(Self {
             file_manager,
             log_file,

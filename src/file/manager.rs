@@ -30,7 +30,7 @@ impl FileManager {
 
         trace!("Cleaning up temporary files in directory: {:?}", path_buf);
         for file in path_buf.read_dir()?.flatten() {
-            let file_path = file.file_name();
+            let file_path = file.path();
             if file_path.to_str().is_some_and(|s| s.starts_with("temp")) {
                 std::fs::remove_file(file_path)?;
             }

@@ -53,7 +53,7 @@ impl Page {
         Ok(())
     }
 
-    pub fn get_bytes(&self, offset: usize) -> PageResult<Vec<u8>> {
+    pub fn get_bytes(&self, offset: usize) -> PageResult<&[u8]> {
         self.assert_offset_within_bounds(offset, std::mem::size_of::<i32>())?;
 
         let length = self.get_integer(offset)?;
@@ -64,7 +64,7 @@ impl Page {
         }
         let start = offset + std::mem::size_of::<i32>();
         let end = start + length;
-        Ok(self.content[start..end].to_vec())
+        Ok(&self.content[start..end])
     }
 
     pub fn set_bytes(&mut self, offset: usize, bytes: &[u8]) -> PageResult<()> {
@@ -85,7 +85,11 @@ impl Page {
 
     pub fn get_string(&self, offset: usize) -> PageResult<String> {
         self.get_bytes(offset)
-            .and_then(|bytes| String::from_utf8(bytes).map_err(|_| PageError::InvalidData))
+            .and_then(|bytes| {
+                std::str::from_utf8(bytes)
+                    .map(|s| s.to_string())
+                    .map_err(|_| PageError::InvalidData)
+            })
     }
 
     pub fn set_string(&mut self, offset: usize, s: &str) -> PageResult<()> {
@@ -112,8 +116,8 @@ impl Page {
         }
     }
 
-    pub(crate) fn max_length(str: &str) -> usize {
-        std::mem::size_of::<i32>() + str.len()
+    pub(crate) fn max_length(s: &str) -> usize {
+        std::mem::size_of::<i32>() + s.len()
     }
 }
 

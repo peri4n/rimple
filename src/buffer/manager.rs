@@ -66,7 +66,7 @@ impl BufferManager {
     }
 
     pub fn unpin(&mut self, buffer: &mut Buffer) {
-        debug!("Trying to pin block: {:?}", buffer.block_id());
+        debug!("Trying to unpin block: {:?}", buffer.block_id());
         buffer.unpin();
         if !buffer.is_pinned() {
             self.available += 1;
@@ -94,7 +94,7 @@ impl BufferManager {
         if let Some(buffer) = self.find_existing_buffer(&block) {
             let mut locked_buffer = buffer
                 .lock()
-                .map_err(|_| io::Error::other("Failed to acquire buffer lock"))?;
+                .map_err(|e| io::Error::other("Failed to acquire buffer lock"))?;
             if !locked_buffer.is_pinned() {
                 self.available -= 1;
             }

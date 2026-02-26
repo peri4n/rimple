@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    file::{block_id::BlockId, manager::FileManager, page::Page},
+    file::{BlockId, FileManager, Page},
     log::manager::LogManager,
 };
 

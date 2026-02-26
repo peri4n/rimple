@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::file::{block_id::BlockId, manager::FileManager, page::Page};
+use crate::file::{BlockId, FileManager, Page};
 
 pub(crate) struct LogIterator {
     file_manager: Arc<FileManager>,

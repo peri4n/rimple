@@ -16,3 +16,22 @@ fn main() -> Result<(), io::Error> {
     info!("Listening to requests");
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+
+    use crate::db::SimpleDB;
+
+    fn new_test_db(block: usize) -> (tempfile::TempDir, SimpleDB) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let db = SimpleDB::new(tmp.path(), block).unwrap_or_else(|e| {
+            panic!("Failed to create test database in {} because {}", tmp.path().display(), e)
+        });
+        (tmp, db)
+    }
+
+    #[test]
+    fn create_a_new_database() {
+        let (_tmp, _db) = new_test_db(4096);
+    }
+}

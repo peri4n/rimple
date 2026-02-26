@@ -8,7 +8,7 @@ use log::{debug, trace};
 
 use crate::{
     buffer::buffer::Buffer,
-    file::{block_id::BlockId, manager::FileManager},
+    file::{BlockId, FileManager},
     log::manager::LogManager,
 };
 

@@ -1,6 +1,6 @@
 use log::info;
 
-use crate::{buffer::manager::BufferManager, file::manager::FileManager, log::manager::LogManager};
+use crate::{buffer::manager::BufferManager, file::FileManager, log::manager::LogManager};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
@@ -16,7 +16,11 @@ impl SimpleDB {
     pub const LOG_FILE: &'static str = "simpledb.log";
 
     pub fn new(dirname: impl AsRef<Path>, block_size: usize) -> std::io::Result<Self> {
-        info!("Start to initialize the database in folder {:?} with block size {}", dirname.as_ref(), block_size);
+        info!(
+            "Start to initialize the database in folder {:?} with block size {}",
+            dirname.as_ref(),
+            block_size
+        );
         let file_manager = Arc::new(FileManager::new(&dirname, block_size)?);
         let log_manager = Arc::new(Mutex::new(LogManager::new(
             file_manager.clone(),

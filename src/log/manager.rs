@@ -3,7 +3,7 @@ use std::{io, path::PathBuf, sync::Arc};
 use log::{debug, trace};
 
 use crate::{
-    file::{block_id::BlockId, manager::FileManager, page::Page},
+    file::{BlockId, FileManager, Page},
     log::iterator::LogIterator,
 };
 
@@ -132,7 +132,7 @@ impl LogManager {
 mod test {
 
     use super::*;
-    use crate::{db::SimpleDB, file::page::Page};
+    use crate::{db::SimpleDB, file::Page};
 
     #[test]
     fn example_run() {

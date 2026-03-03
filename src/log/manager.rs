@@ -55,7 +55,7 @@ impl LogManager {
         })
     }
 
-    pub fn append(&mut self, record: &[u8]) -> io::Result<usize> {
+    pub fn append(&mut self, record: &[u8]) -> anyhow::Result<usize> {
         let mut boundary = self.log_page.get_integer(0).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,

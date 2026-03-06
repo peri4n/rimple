@@ -1,25 +1,42 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::{Arc, Mutex}};
 
 use crate::{
+    buffer::manager::BufferManager,
     file::{BlockId, FileManager},
     log::manager::LogManager,
+    tx::recovery::manager::RecoveryManager,
 };
 
 pub struct Transaction {
     file_manager: Arc<FileManager>,
     log_manager: Arc<LogManager>,
+    buffer_manager: Arc<BufferManager>,
+    recovery_manager: Arc<Mutex<RecoveryManager>>,
 }
 
 impl Transaction {
-    pub fn new(file_manager: Arc<FileManager>, log_manager: Arc<LogManager>) -> Self {
+    pub fn new(
+        file_manager: Arc<FileManager>,
+        log_manager: Arc<LogManager>,
+        buffer_manager: Arc<BufferManager>,
+        recovery_manager: Arc<Mutex<RecoveryManager>>,
+    ) -> Self {
         Transaction {
             file_manager,
             log_manager,
+            buffer_manager,
+            recovery_manager,
         }
     }
 
-    pub fn commit(&mut self) {
-        todo!()
+    pub fn commit(&mut self) -> anyhow::Result<()> {
+        let mut recovery_manager = self
+            .recovery_manager
+            .lock()
+            .expect("Mutex of recovery manager poisoned");
+        recovery_manager.commit()?;
+
+        Ok(())
     }
 
     pub fn rollback(&mut self) {

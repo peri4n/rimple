@@ -64,8 +64,10 @@ impl Page {
     /// let page = Page::with_bytes(vec![1, 2, 3, 4]);
     /// assert_eq!(page.len(), 4);
     /// ```
-    pub fn with_bytes(bytes: Vec<u8>) -> Self {
-        Self { content: bytes }
+    pub fn with_bytes(bytes: &[u8]) -> Self {
+        Self {
+            content: bytes.to_vec(),
+        }
     }
 
     /// Creates a new page with the specified size, initialized with zeros.

@@ -1,6 +1,13 @@
-use std::mem;
+use std::{
+    mem,
+    sync::{Arc, Mutex},
+};
 
-use crate::{file::{BlockId, Page}, tx::{recovery::logrecord::LogRecord, transaction::Transaction}};
+use crate::{
+    file::{BlockId, Page},
+    log::manager::LogManager,
+    tx::{recovery::logrecord::LogRecord, transaction::Transaction},
+};
 
 pub struct SetI32Record {
     tx_num: i32,
@@ -30,10 +37,10 @@ impl SetI32Record {
     }
 
     pub(crate) fn write_to_log(
-        log_manager: &mut crate::log::manager::LogManager,
+        log_manager: Arc<Mutex<LogManager>>,
         tx_num: i32,
         block_id: &BlockId,
-        offset: i32,
+        offset: usize,
         value: i32,
     ) -> anyhow::Result<usize> {
         let tpos = mem::size_of::<i32>();
@@ -48,10 +55,10 @@ impl SetI32Record {
         page.set_integer(tpos, tx_num)?;
         page.set_string(fpos, block_id.path().to_str().unwrap())?;
         page.set_integer(bpos, block_id.block_no() as i32)?;
-        page.set_integer(opos, offset)?;
+        page.set_integer(opos, offset as i32)?;
         page.set_integer(vpos, value)?;
 
-        log_manager.append(&page.content())
+        log_manager.lock().unwrap().append(&page.content())
     }
 }
 

@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TxOp {
     Checkpoint,
     Start,
@@ -35,7 +35,8 @@ pub trait LogRecord {
     fn undo(&self, tx: &mut Transaction);
 }
 
-fn from_page(page: Page) -> anyhow::Result<Box<dyn LogRecord>> {
+pub fn from_page(bytes: &[u8]) -> anyhow::Result<Box<dyn LogRecord>> {
+    let page = Page::with_bytes(bytes);
     let op_code = page.get_integer(0)?;
     let op = match op_code {
         0 => TxOp::Checkpoint,

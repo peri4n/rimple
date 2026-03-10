@@ -1,4 +1,7 @@
-use std::{path::Path, sync::{Arc, Mutex}};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     buffer::manager::BufferManager,

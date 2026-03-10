@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::bail;
 use log::{debug, trace};
 
 use crate::{
@@ -30,7 +31,10 @@ impl BufferManager {
         log_manager: Arc<Mutex<LogManager>>,
         num_buffers: usize,
     ) -> Self {
-        debug!("Start to initialize buffer manager with {} buffers", num_buffers);
+        debug!(
+            "Start to initialize buffer manager with {} buffers",
+            num_buffers
+        );
         let buffers = (0..num_buffers)
             .map(|_| {
                 Arc::new(Mutex::new(Buffer::new(
@@ -77,11 +81,11 @@ impl BufferManager {
         self.available
     }
 
-    pub fn flush_all(&mut self, txn: i32) -> io::Result<()> {
+    pub fn flush_all(&mut self, txn: i32) -> anyhow::Result<()> {
         for buffer in &mut self.pool {
-            let mut buffer = buffer.lock().map_err(|_| {
-                io::Error::other("Failed to acquire buffer lock")
-            })?;
+            let mut buffer = buffer
+                .lock()
+                .map_err(|_| io::Error::other("Failed to acquire buffer lock"))?;
             if buffer.modifying_txn() == txn {
                 buffer.flush()?;
             }
@@ -90,7 +94,7 @@ impl BufferManager {
         Ok(())
     }
 
-    fn try_to_pin(&mut self, block: BlockId) -> io::Result<Arc<Mutex<Buffer>>> {
+    fn try_to_pin(&mut self, block: BlockId) -> anyhow::Result<Arc<Mutex<Buffer>>> {
         if let Some(buffer) = self.find_existing_buffer(&block) {
             let mut locked_buffer = buffer
                 .lock()
@@ -109,7 +113,7 @@ impl BufferManager {
             locked_buffer.pin();
             Ok(buffer.clone())
         } else {
-            Err(io::Error::other("No available buffers to pin"))
+            bail!("No available buffers to pin")
         }
     }
 

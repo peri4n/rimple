@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use crate::{file::Page, log::manager::LogManager, tx::recovery::logrecord::LogRecord};
 
 pub struct RollbackRecord {
@@ -11,12 +13,15 @@ impl RollbackRecord {
         Ok(RollbackRecord { tx_num })
     }
 
-    pub(crate) fn write_to_log(log_manager: &mut LogManager, tx_num: i32) -> anyhow::Result<usize> {
+    pub(crate) fn write_to_log(
+        log_manager: Arc<Mutex<LogManager>>,
+        tx_num: i32,
+    ) -> anyhow::Result<usize> {
         let mut page = Page::with_size(std::mem::size_of::<i32>() * 2);
         page.set_integer(0, crate::tx::recovery::logrecord::TxOp::Rollback as i32)?;
         page.set_integer(std::mem::size_of::<i32>(), tx_num)?;
 
-        log_manager.append(&page.content())
+        log_manager.lock().unwrap().append(&page.content())
     }
 }
 

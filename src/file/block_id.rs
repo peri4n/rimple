@@ -17,7 +17,7 @@ use std::{
 /// assert_eq!(block.block_no(), 42);
 /// assert_eq!(block.path(), std::path::Path::new("/tmp/data.db"));
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BlockId {
     path: PathBuf,
     block_no: u64,

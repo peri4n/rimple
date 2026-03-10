@@ -95,14 +95,14 @@ impl LogManager {
         Ok(self.latest_lsn)
     }
 
-    pub fn flush(&mut self, lsn: usize) -> io::Result<()> {
+    pub fn flush(&mut self, lsn: usize) -> anyhow::Result<()> {
         if lsn >= self.latest_saved_lsn {
             return self.flush_internal();
         }
         Ok(())
     }
 
-    fn flush_internal(&mut self) -> io::Result<()> {
+    fn flush_internal(&mut self) -> anyhow::Result<()> {
         self.file_manager
             .write(&self.current_block, &self.log_page)?;
         self.latest_saved_lsn = self.latest_lsn;

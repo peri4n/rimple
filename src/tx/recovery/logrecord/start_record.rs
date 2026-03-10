@@ -1,6 +1,13 @@
 use std::mem;
 
-use crate::{file::Page, log::manager::LogManager, tx::{recovery::logrecord::{LogRecord, TxOp}, transaction::Transaction}};
+use crate::{
+    file::Page,
+    log::manager::LogManager,
+    tx::{
+        recovery::logrecord::{LogRecord, TxOp},
+        transaction::Transaction,
+    },
+};
 
 pub struct StartRecord {
     tx_num: i32,

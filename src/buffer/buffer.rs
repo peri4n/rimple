@@ -76,7 +76,7 @@ impl Buffer {
         }
     }
 
-    pub(crate) fn assign_to_block(&mut self, block_id: &BlockId) -> io::Result<()> {
+    pub(crate) fn assign_to_block(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
         self.flush()?;
         self.block_id = Some(block_id.clone());
         self.file_manager.read(block_id, &mut self.page)?;
@@ -85,7 +85,7 @@ impl Buffer {
         Ok(())
     }
 
-    pub(crate) fn flush(&mut self) -> io::Result<()> {
+    pub(crate) fn flush(&mut self) -> anyhow::Result<()> {
         if self.txnum >= 0 {
             let mut log_manager = self
                 .log_manager

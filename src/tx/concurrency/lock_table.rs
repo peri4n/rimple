@@ -16,6 +16,10 @@ pub struct LockTable {
     locks: Arc<Mutex<HashMap<BlockId, i32>>>,
 }
 
+/// Handles locking for transactions.
+/// Each block can have multiple shared locks (indicated by a positive integer value in the locks map),
+/// or a single exclusive lock (indicated by a negative integer value in the locks map).
+/// If the block is not locked, it will not be present in the locks map.
 impl LockTable {
     pub fn new() -> Self {
         LockTable {
@@ -23,9 +27,10 @@ impl LockTable {
         }
     }
 
+    /// Acquires a shared lock on the specified block.
     pub fn s_lock(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
         if let Ok(mut locks) = self.locks.try_lock()
-            && !Self::has_x_lock(&locks, block_id)
+            && !has_x_lock(&locks, block_id)
         {
             *locks.entry(block_id.clone()).or_insert(0) += 1; // will not be negative
             return Ok(());
@@ -34,33 +39,45 @@ impl LockTable {
         Err(From::from(LockTableError::LockAbort))
     }
 
+    /// Acquires an exclusive lock on the specified block.
     pub fn x_lock(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    pub fn release(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
-        if let Ok(mut locks) = self.locks.try_lock() {
-            if let Some(count) = locks.get_mut(block_id) {
-                *count -= 1;
-                if *count == 0 {
-                    locks.remove(block_id);
-                }
+        if let Ok(mut locks) = self.locks.try_lock()
+            && !has_other_s_locks(&locks, block_id) {
+                *locks.entry(block_id.clone()).or_insert(-1) = -1; // means eXclusive lock
                 return Ok(());
             }
-        }
-        todo!()
+
+        Err(From::from(LockTableError::LockAbort))
     }
 
-    fn has_x_lock(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -> bool {
-        Self::get_lock_val(locks, blk) < 0
-    }
-    fn has_other_s_locks(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -> bool {
-        Self::get_lock_val(locks, blk) > 1
-    }
-    fn get_lock_val(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -> i32 {
-        match locks.get(&blk) {
-            Some(&ival) => ival,
-            None => 0,
+    /// Releases the lock on the specified block.
+    /// If there are multiple shared locks, it will decrement the count.
+    /// If there is only one lock (either shared or exclusive), it will remove the entry from the locks map.
+    pub fn unlock(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
+        if let Ok(mut locks) = self.locks.try_lock()
+            && let Some(count) = locks.get_mut(block_id)
+        {
+            if *count > 1 {
+                *count -= 1;
+            } else {
+                locks.remove(block_id);
+            }
+            return Ok(());
         }
+
+        Err(From::from(LockTableError::LockAbort))
+    }
+}
+
+fn has_x_lock(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -> bool {
+    get_lock_val(locks, blk) < 0
+}
+fn has_other_s_locks(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -> bool {
+    get_lock_val(locks, blk) > 1
+}
+fn get_lock_val(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -> i32 {
+    match locks.get(&blk) {
+        Some(&ival) => ival,
+        None => 0,
     }
 }

@@ -13,7 +13,9 @@ use crate::{
     log::manager::LogManager,
 };
 
-enum BufferError {
+#[derive(thiserror::Error, Debug)]
+pub enum BufferError {
+    #[error("Buffer pinning failed: {0}")]
     Timeout(String),
 }
 
@@ -54,7 +56,7 @@ impl BufferManager {
         }
     }
 
-    pub fn pin(&mut self, block: &BlockId) -> Result<Arc<Mutex<Buffer>>, BufferError> {
+    pub fn pin(&mut self, block: &BlockId) -> anyhow::Result<Arc<Mutex<Buffer>>, BufferError> {
         debug!("Trying to pin block: {}", block);
         let deadline = Instant::now() + Duration::from_millis(self.max_time);
 
@@ -69,12 +71,16 @@ impl BufferManager {
         Err(BufferError::Timeout("Could not pin buffer: timeout".into()))
     }
 
-    pub fn unpin(&mut self, buffer: &mut Buffer) {
+    pub fn unpin(&mut self, buffer: Arc<Mutex<Buffer>>) -> anyhow::Result<()> {
+        let mut buffer = buffer.lock().unwrap();
         debug!("Trying to unpin block: {:?}", buffer.block_id());
+
         buffer.unpin();
         if !buffer.is_pinned() {
             self.available += 1;
         }
+
+        Ok(())
     }
 
     pub fn available(&self) -> usize {

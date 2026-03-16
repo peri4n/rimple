@@ -30,6 +30,7 @@ pub trait LogRecord {
     fn op(&self) -> TxOp;
 
     // TODO: this should retun an Option, since some log records don't have a tx_num (e.g. checkpoint).
+    // The only record type that doesn't have a tx_num is Checkpoint, and we can just return -1 for it.
     fn tx_num(&self) -> i32;
 
     fn undo(&self, tx: &mut Transaction);
@@ -45,7 +46,7 @@ pub fn from_page(bytes: &[u8]) -> anyhow::Result<Box<dyn LogRecord>> {
         3 => TxOp::Rollback,
         4 => TxOp::SetI32,
         5 => TxOp::SetString,
-        _ => return bail!("Unknown log record type: {}", op_code),
+        _ => bail!("Unknown log record type: {}", op_code),
     };
     match op {
         TxOp::Checkpoint => Ok(Box::new(CheckpointRecord::new())),

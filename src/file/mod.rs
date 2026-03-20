@@ -6,9 +6,9 @@
 //! - File management with caching and synchronous I/O
 
 // Private modules - not exposed in public API
-mod block_id;
-mod manager;
-mod page;
+pub mod block_id;
+pub mod manager;
+pub mod page;
 
 // Public re-exports with inlined documentation
 #[doc(inline)]

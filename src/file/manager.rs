@@ -23,28 +23,6 @@ use crate::file::{BlockId, Page};
 /// - **File caching**: Open files are cached to avoid repeated filesystem calls  
 /// - **Synchronous I/O**: Uses `O_SYNC` flag to ensure data is written to disk
 /// - **Automatic cleanup**: Removes temporary files on initialization
-///
-/// # Examples
-///
-/// ```
-/// # use rimple::file::{FileManager, Page, BlockId};
-/// # use std::path::PathBuf;
-/// # use tempfile::tempdir;
-/// # let tmp = tempdir().unwrap();
-/// let fm = FileManager::new(&tmp, 4096).unwrap();
-///
-/// // Create and write a page
-/// let mut page = Page::with_size(4096);
-/// page.set_string(0, "Hello, world!").unwrap();
-///
-/// let block_id = fm.append_block(tmp.path().join("test.db").as_path()).unwrap();
-/// fm.write(&block_id, &page).unwrap();
-///
-/// // Read the page back
-/// let mut read_page = Page::with_size(4096);
-/// fm.read(&block_id, &mut read_page).unwrap();
-/// assert_eq!(read_page.get_string(0).unwrap(), "Hello, world!");
-/// ```
 pub struct FileManager {
     block_size: usize,
     open_files: Mutex<HashMap<PathBuf, File>>,
@@ -65,16 +43,6 @@ impl FileManager {
     /// # Errors
     ///
     /// Returns an I/O error if the directory cannot be created or accessed.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use rimple::file::FileManager;
-    /// # use tempfile::tempdir;
-    /// # let tmp = tempdir().unwrap();
-    /// let fm = FileManager::new(&tmp, 4096).unwrap();
-    /// assert_eq!(fm.block_size(), 4096);
-    /// ```
     pub fn new(path: impl AsRef<Path>, block_size: usize) -> io::Result<Self> {
         debug!("Start to initialize file manager");
         let path_buf = path.as_ref().to_path_buf();
@@ -115,16 +83,16 @@ impl FileManager {
     /// # Errors
     ///
     /// Returns an I/O error if the file cannot be opened or the cache lock fails.
-    pub(crate) fn get_file(&self, file_path: &Path) -> io::Result<File> {
+    pub(crate) fn get_file(&self, file_path: &Path) -> anyhow::Result<File> {
         debug!("Fetching file {:?}", file_path);
         let mut open_files = self
             .open_files
             .lock()
-            .map_err(|_| io::Error::other("Failed to acquire open files lock"))?;
+            .map_err(|e| anyhow::anyhow!("Failed to acquire file cache lock: {}", e))?;
 
         if let Some(file) = open_files.get(file_path) {
             trace!("File was already in cache {:?}", file_path);
-            return file.try_clone();
+            return Ok(file.try_clone()?);
         }
 
         trace!("File not found in cache. Creating new: {:?}", file_path);
@@ -149,21 +117,7 @@ impl FileManager {
     /// # Errors
     ///
     /// Returns an I/O error if the file cannot be accessed or read.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use rimple::file::{FileManager, Page, BlockId};
-    /// # use std::path::PathBuf;
-    /// # use tempfile::tempdir;
-    /// # let tmp = tempdir().unwrap();
-    /// # let fm = FileManager::new(&tmp, 4096).unwrap();
-    /// # let block_id = BlockId::new(tmp.path().join("test.db"), 0);
-    /// let mut page = Page::with_size(4096);
-    /// // This would fail in practice since block doesn't exist yet
-    /// // fm.read(&block_id, &mut page).unwrap();
-    /// ```
-    pub fn read(&self, block_id: &BlockId, page: &mut Page) -> io::Result<()> {
+    pub fn read(&self, block_id: &BlockId, page: &mut Page) -> anyhow::Result<()> {
         let mut file = self.get_file(block_id.path())?;
         let offset = block_id.block_no() * self.block_size as u64;
         file.seek(std::io::SeekFrom::Start(offset))?;
@@ -183,21 +137,6 @@ impl FileManager {
     /// # Errors
     ///
     /// Returns an I/O error if the file cannot be accessed or written.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use rimple::file::{FileManager, Page, BlockId};
-    /// # use std::path::PathBuf;
-    /// # use tempfile::tempdir;
-    /// # let tmp = tempdir().unwrap();
-    /// # let fm = FileManager::new(&tmp, 4096).unwrap();
-    /// let mut page = Page::with_size(4096);
-    /// page.set_string(0, "test data").unwrap();
-    ///
-    /// let block_id = BlockId::new(tmp.path().join("test.db"), 0);
-    /// fm.write(&block_id, &page).unwrap();
-    /// ```
     pub fn write(&self, block_id: &BlockId, page: &Page) -> anyhow::Result<()> {
         let mut file = self.get_file(block_id.path())?;
         let offset = block_id.block_no() * self.block_size as u64;
@@ -221,21 +160,6 @@ impl FileManager {
     /// # Errors
     ///
     /// Returns an I/O error if the file cannot be accessed or extended.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use rimple::file::FileManager;
-    /// # use tempfile::tempdir;
-    /// # let tmp = tempdir().unwrap();
-    /// # let fm = FileManager::new(&tmp, 4096).unwrap();
-    /// let file_path = tmp.path().join("new_file.db");
-    /// let block_id = fm.append_block(&file_path).unwrap();
-    /// assert_eq!(block_id.block_no(), 0); // First block
-    ///
-    /// let second_block = fm.append_block(&file_path).unwrap();
-    /// assert_eq!(second_block.block_no(), 1); // Second block
-    /// ```
     pub fn append_block(&self, path: &Path) -> anyhow::Result<BlockId> {
         let new_block_id = BlockId::new(path.to_path_buf(), self.size(path)?);
         self.write(&new_block_id, &Page::with_size(self.block_size))?;
@@ -244,16 +168,6 @@ impl FileManager {
     }
 
     /// Returns the configured block size.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use rimple::file::FileManager;
-    /// # use tempfile::tempdir;
-    /// # let tmp = tempdir().unwrap();
-    /// let fm = FileManager::new(&tmp, 8192).unwrap();
-    /// assert_eq!(fm.block_size(), 8192);
-    /// ```
     pub fn block_size(&self) -> usize {
         self.block_size
     }
@@ -267,38 +181,86 @@ impl FileManager {
     /// # Returns
     ///
     /// The number of blocks, or 0 if the file cannot be accessed.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use rimple::file::FileManager;
-    /// # use tempfile::tempdir;
-    /// # let tmp = tempdir().unwrap();
-    /// # let fm = FileManager::new(&tmp, 4096).unwrap();
-    /// let file_path = tmp.path().join("test.db");
-    ///
-    /// // New file has 0 blocks
-    /// assert_eq!(fm.size(&file_path).unwrap(), 0);
-    ///
-    /// // After appending a block
-    /// fm.append_block(&file_path).unwrap();
-    /// assert_eq!(fm.size(&file_path).unwrap(), 1);
-    /// ```
     pub fn size(&self, path: &Path) -> anyhow::Result<u64> {
-        self.get_file(path)
-            .and_then(|f| f.metadata().map(|m| m.len() / self.block_size as u64))
-            .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))
+        self.get_file(path).and_then(|f| {
+            f.metadata()
+                .map_err(|e| anyhow::anyhow!("Failed to get meta data of file: {}", e))
+                .map(|m| m.len() / self.block_size as u64)
+        })
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod test {
+    use tempfile::TempDir;
+
     use super::*;
+
+    pub(crate) fn temp_file_manager(block_size: usize) -> (FileManager, TempDir) {
+        let tmp = tempfile::tempdir().expect("Failed to create temp dir");
+        (
+            FileManager::new(&tmp, block_size).expect("Failed to create FileManager"),
+            tmp,
+        )
+    }
 
     #[test]
     fn create_a_new_database_directory() {
-        let tmp = tempfile::tempdir().expect("Failed to create temp dir");
-        let fm = FileManager::new(&tmp, 4096);
-        assert!(fm.is_ok());
+        // setup
+        let (fm, _) = temp_file_manager(4096);
+
+        // test + verify
+        assert_eq!(fm.block_size(), 4096);
+    }
+
+    #[test]
+    fn writing_a_single_block_and_reading_it_is_consistent() {
+        // setup
+        let (fm, tmp) = temp_file_manager(4096);
+        let mut page = Page::with_size(4096);
+        page.set_string(0, "Hello, world!").unwrap();
+        page.set_integer(100, 42).unwrap();
+        let path = tmp.path().join("blockfile");
+        let block_id = BlockId::new(path.clone(), 0);
+
+        // verify
+        assert!(fm.write(&block_id, &page).is_ok());
+        assert_eq!(fm.size(&path).unwrap(), 1);
+
+        // test
+        let mut read_page = Page::with_size(4096);
+        fm.read(&block_id, &mut read_page).unwrap();
+
+        // verify
+        assert_eq!(read_page.get_string(0).unwrap(), "Hello, world!");
+        assert_eq!(read_page.get_integer(100).unwrap(), 42);
+    }
+
+    #[test]
+    fn appending_blocks_increases_file_size() {
+        // setup
+        let (fm, tmp) = temp_file_manager(4096);
+        let page = Page::with_size(4096);
+        let path = tmp.path().join("appendfile");
+        fm.write(&BlockId::new(path.clone(), 0), &page).unwrap();
+        assert_eq!(fm.size(&path).unwrap(), 1);
+
+        // test
+        assert!(fm.append_block(&path).is_ok());
+
+        // verify
+        assert_eq!(fm.size(&path).unwrap(), 2);
+    }
+
+    #[test]
+    fn reading_nonexistent_file_returns_error() {
+        // setup
+        let (fm, tmp) = temp_file_manager(4096);
+        let path = tmp.path().join("nonexistent");
+        let block_id = BlockId::new(path, 0);
+        let mut page = Page::with_size(4096);
+
+        // test + verify
+        assert!(fm.read(&block_id, &mut page).is_err());
     }
 }

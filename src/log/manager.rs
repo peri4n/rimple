@@ -101,57 +101,112 @@ impl LogManager {
 #[cfg(test)]
 mod test {
 
+    use tempfile::TempDir;
+
     use super::*;
-    use crate::{db::SimpleDB, file::Page};
+
+    fn temp_log_manager(block_size: usize) -> (LogManager, TempDir) {
+        let (fm, tmp) = crate::file::manager::test::temp_file_manager(block_size);
+        (
+            LogManager::new(Arc::new(fm), tmp.path().join("logfile"))
+                .expect("Failed to create LogManager"),
+            tmp,
+        )
+    }
+
+    fn mk_record(s: &str, i: i32) -> Vec<u8> {
+        let npos = Page::max_length(s);
+        let mut page = Page::with_size(npos + std::mem::size_of::<i32>());
+        page.set_string(0, s).unwrap();
+        page.set_integer(npos, i).unwrap();
+        page.content().to_vec()
+    }
+
+    fn parse_entry(bytes: &[u8]) -> (String, i32) {
+        let page = Page::with_bytes(bytes);
+        let s = page.get_string(0).unwrap();
+        let i = page.get_integer(Page::max_length(&s)).unwrap();
+        (s, i)
+    }
 
     #[test]
-    fn example_run() {
-        let db = SimpleDB::new("mydb", 400).expect("Failed to create database");
-        let mut log_manager = db
-            .log_manager()
-            .try_lock()
-            .expect("Failed to acquire lock on LogManager");
-        append_log_records(&mut log_manager, 1, 35);
-        print_log_records(&log_manager);
-        append_log_records(&mut log_manager, 36, 70);
-        log_manager.flush(65).expect("Failed to flush log records");
-        print_log_records(&log_manager);
+    fn empty_log_iterates_nothing() {
+        let (log, _tmp) = temp_log_manager(4096);
+        let items: Vec<_> = log.iter().unwrap().collect();
+        assert!(items.is_empty());
     }
 
-    fn print_log_records(log_manager: &LogManager) {
-        println!("The log files contains the following records:");
-        for entry in log_manager.iter().expect("Failed to create log iterator") {
-            let page = Page::with_bytes(&entry);
-            let s = page
-                .get_string(0)
-                .expect("Failed to read string from log record");
-            let i = page
-                .get_integer(Page::max_length(&s))
-                .expect("Failed to read integer from log record");
-            println!("{}: {}", s, i);
+    #[test]
+    fn append_and_iter_single_block() {
+        let (mut lm, _) = temp_log_manager(4096);
+        let mut last_lsn = 0;
+        for i in 1..=5 {
+            last_lsn = lm
+                .append(&mk_record(&format!("rec{:03}", i), 1000 + i))
+                .unwrap();
+            assert_eq!(last_lsn, i as usize);
         }
-        println!()
+        lm.flush(last_lsn).unwrap();
+
+        let got: Vec<_> = lm
+            .iter()
+            .unwrap()
+            .map(|e| parse_entry(&e))
+            .collect();
+
+        let exp: Vec<_> = (1..=5)
+            .rev()
+            .map(|i| (format!("rec{:03}", i), 1000 + i))
+            .collect();
+        assert_eq!(got, exp);
     }
 
-    fn append_log_records(log_manager: &mut LogManager, start: usize, end: usize) {
-        println!("Appending log records from {} to {}", start, end);
-        for i in start..=end {
-            let record = create_log_record(format!("record{}", i), (i + 1000) as i32);
-            let isn = log_manager
-                .append(&record)
-                .expect("Failed to append log record");
-            println!("Appended log record {} with ISN {}", i, isn);
+    #[test]
+    fn append_across_blocks_iterates_newest_block_first() {
+        let (mut lm, _) = temp_log_manager(128);
+
+        // Each record ~18 bytes in block; 6 fit in 128 -> force 2 blocks with 12 records
+        let mut last_lsn = 0;
+        for i in 1..=12 {
+            last_lsn = lm
+                .append(&mk_record(&format!("rec{:03}", i), 2000 + i))
+                .unwrap();
         }
-        println!()
+        lm.flush(last_lsn).unwrap();
+
+        let got: Vec<_> = lm
+            .iter()
+            .unwrap()
+            .map(|e| parse_entry(&e).0)
+            .collect();
+
+        // Expect reverse chronological: 12..7 then 6..1
+        let mut exp: Vec<String> = (7..=12).rev().map(|i| format!("rec{:03}", i)).collect();
+        exp.extend((1..=6).rev().map(|i| format!("rec{:03}", i)));
+        assert_eq!(got, exp);
     }
 
-    fn create_log_record(s: String, i: i32) -> Vec<u8> {
-        let npos = Page::max_length(&s);
-        let mut page = Page::with_size(npos + std::mem::size_of::<i32>());
-        page.set_string(0, &s)
-            .expect("Failed to write string to log record");
-        page.set_integer(npos, i)
-            .expect("Failed to write integer to log record");
-        page.content().to_vec()
+    #[test]
+    fn flush_persists_records_across_reopen() {
+        let (mut lm, tmp) = temp_log_manager(4096);
+        let mut last_lsn = 0;
+        for i in 1..=3 {
+            last_lsn = lm
+                .append(&mk_record(&format!("rec{:03}", i), 3000 + i))
+                .unwrap();
+        }
+        lm.flush(last_lsn).unwrap();
+
+        let lm2 = LogManager::new(Arc::new(FileManager::new(tmp.path(), 4096).unwrap()), tmp.path().join("logfile")).unwrap();
+        let got: Vec<_> = lm2
+            .iter()
+            .unwrap()
+            .map(|e| parse_entry(&e))
+            .collect();
+        let exp: Vec<_> = (1..=3)
+            .rev()
+            .map(|i| (format!("rec{:03}", i), 3000 + i))
+            .collect();
+        assert_eq!(got, exp);
     }
 }

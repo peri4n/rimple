@@ -16,4 +16,4 @@ pub use self::block_id::BlockId;
 #[doc(inline)]
 pub use self::manager::FileManager;
 #[doc(inline)]
-pub use self::page::{Page, PageError, PageResult};
+pub use self::page::Page;

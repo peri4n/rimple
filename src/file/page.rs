@@ -60,7 +60,7 @@ impl Page {
     ///
     /// ```
     /// # use rimple::file::Page;
-    /// let page = Page::with_bytes(vec![1, 2, 3, 4]);
+    /// let page = Page::with_bytes(&vec![1, 2, 3, 4]);
     /// assert_eq!(page.len(), 4);
     /// ```
     pub fn with_bytes(bytes: &[u8]) -> Self {
@@ -109,7 +109,7 @@ impl Page {
     ///
     /// ```
     /// # use rimple::file::Page;
-    /// let page = Page::with_bytes(vec![0x00, 0x00, 0x00, 0x7F]);
+    /// let page = Page::with_bytes(&vec![0x00, 0x00, 0x00, 0x7F]);
     /// assert_eq!(page.get_integer(0).unwrap(), 127);
     /// ```
     pub fn get_integer(&self, offset: usize) -> anyhow::Result<i32> {
@@ -292,7 +292,7 @@ impl Page {
     ///
     /// ```
     /// # use rimple::file::Page;
-    /// let page = Page::with_bytes(vec![1, 2, 3, 4]);
+    /// let page = Page::with_bytes(&vec![1, 2, 3, 4]);
     /// assert_eq!(page.content(), &[1, 2, 3, 4]);
     /// ```
     pub fn content(&self) -> &[u8] {
@@ -359,4 +359,3 @@ impl Page {
         std::mem::size_of::<i32>() + s.len()
     }
 }
-

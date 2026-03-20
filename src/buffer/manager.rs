@@ -104,7 +104,7 @@ impl BufferManager {
         if let Some(buffer) = self.find_existing_buffer(&block) {
             let mut locked_buffer = buffer
                 .lock()
-                .map_err(|e| io::Error::other("Failed to acquire buffer lock"))?;
+                .map_err(|_| io::Error::other("Failed to acquire buffer lock"))?;
             if !locked_buffer.is_pinned() {
                 self.available -= 1;
             }

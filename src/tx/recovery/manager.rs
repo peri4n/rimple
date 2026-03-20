@@ -4,34 +4,27 @@ use std::sync::{Arc, Mutex};
 use crate::{
     buffer::{buffer::Buffer, manager::BufferManager},
     log::manager::LogManager,
-    tx::{
-        recovery::logrecord::{
-            TxOp, checkpoint_record::CheckpointRecord, commit_record::CommitRecord, from_page,
-            rollback_record::RollbackRecord, set_i32_record::SetI32Record,
-            set_string_record::SetStringRecord,
-        },
-        transaction::Transaction,
+    tx::recovery::logrecord::{
+        checkpoint_record::CheckpointRecord, commit_record::CommitRecord, from_page, rollback_record::RollbackRecord, set_i32_record::SetI32Record, set_string_record::SetStringRecord, start_record::StartRecord, TxOp, UndoContext
     },
 };
 
 pub struct RecoveryManager {
     log_manager: Arc<Mutex<LogManager>>,
     buffer_manager: Arc<Mutex<BufferManager>>,
-    transaction: Arc<Mutex<Transaction>>,
     tx_num: i32,
 }
 
 impl RecoveryManager {
     pub fn new(
-        transaction: Arc<Mutex<Transaction>>,
         tx_num: i32,
         log_manager: Arc<Mutex<LogManager>>,
         buffer_manager: Arc<Mutex<BufferManager>>,
     ) -> Self {
+        StartRecord::write_to_log(log_manager.clone(), tx_num).unwrap();
         RecoveryManager {
             log_manager,
             buffer_manager,
-            transaction,
             tx_num,
         }
     }
@@ -43,14 +36,14 @@ impl RecoveryManager {
     }
 
     pub fn rollback(&mut self) -> anyhow::Result<()> {
-        self.do_rollback();
+        self.do_rollback()?;
         self.buffer_manager.lock().unwrap().flush_all(self.tx_num)?;
         let lsn = RollbackRecord::write_to_log(self.log_manager.clone(), self.tx_num)?;
         self.log_manager.lock().unwrap().flush(lsn)
     }
 
     pub fn recover(&mut self) -> anyhow::Result<()> {
-        self.do_recover();
+        self.do_recover()?;
         self.buffer_manager
             .lock()
             .unwrap()
@@ -99,20 +92,25 @@ impl RecoveryManager {
     }
 
     fn do_rollback(&mut self) -> anyhow::Result<()> {
+        let mut ctx = UndoContext {
+            buffer_manager: self.buffer_manager.clone(),
+        };
         for entry in self.log_manager.lock().unwrap().iter()? {
             let log_record = from_page(&entry)?;
             if log_record.op() == TxOp::Start {
                 return Ok(());
             }
 
-            let mut tx = self.transaction.lock().unwrap();
-            log_record.undo(&mut tx);
+            log_record.undo(&mut ctx)?;
         }
         return Ok(());
     }
 
     fn do_recover(&mut self) -> anyhow::Result<()> {
         let mut finished_txs = vec![];
+        let mut ctx = UndoContext {
+            buffer_manager: self.buffer_manager.clone(),
+        };
         for entry in self.log_manager.lock().unwrap().iter().unwrap() {
             let log_record = from_page(&entry).unwrap();
             // TODO: maybe a match statement would be better here
@@ -122,8 +120,7 @@ impl RecoveryManager {
             if log_record.op() == TxOp::Commit || log_record.op() == TxOp::Rollback {
                 finished_txs.push(log_record.tx_num());
             } else if !finished_txs.contains(&log_record.tx_num()) {
-                let mut tx = self.transaction.lock().unwrap();
-                log_record.undo(&mut tx);
+                log_record.undo(&mut ctx)?;
             }
         }
         Ok(())

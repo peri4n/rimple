@@ -1,4 +1,3 @@
-use std::io;
 
 use ::log::info;
 
@@ -7,7 +6,7 @@ mod db;
 mod file;
 mod log;
 
-fn main() -> Result<(), io::Error> {
+fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     info!("Starting Simple DB");

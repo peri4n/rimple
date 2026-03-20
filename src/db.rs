@@ -15,7 +15,7 @@ pub struct SimpleDB {
 impl SimpleDB {
     pub const LOG_FILE: &'static str = "simpledb.log";
 
-    pub fn new(dirname: impl AsRef<Path>, block_size: usize) -> std::io::Result<Self> {
+    pub fn new(dirname: impl AsRef<Path>, block_size: usize) -> anyhow::Result<Self> {
         info!(
             "Start to initialize the database in folder {:?} with block size {}",
             dirname.as_ref(),

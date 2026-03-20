@@ -237,7 +237,7 @@ impl FileManager {
     /// assert_eq!(second_block.block_no(), 1); // Second block
     /// ```
     pub fn append_block(&self, path: &Path) -> anyhow::Result<BlockId> {
-        let new_block_id = BlockId::new(path.to_path_buf(), self.size(path));
+        let new_block_id = BlockId::new(path.to_path_buf(), self.size(path)?);
         self.write(&new_block_id, &Page::with_size(self.block_size))?;
 
         Ok(new_block_id)
@@ -278,16 +278,16 @@ impl FileManager {
     /// let file_path = tmp.path().join("test.db");
     ///
     /// // New file has 0 blocks
-    /// assert_eq!(fm.size(&file_path), 0);
+    /// assert_eq!(fm.size(&file_path).unwrap(), 0);
     ///
     /// // After appending a block
     /// fm.append_block(&file_path).unwrap();
-    /// assert_eq!(fm.size(&file_path), 1);
+    /// assert_eq!(fm.size(&file_path).unwrap(), 1);
     /// ```
-    pub fn size(&self, path: &Path) -> u64 {
+    pub fn size(&self, path: &Path) -> anyhow::Result<u64> {
         self.get_file(path)
             .and_then(|f| f.metadata().map(|m| m.len() / self.block_size as u64))
-            .unwrap_or(0)
+            .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))
     }
 }
 

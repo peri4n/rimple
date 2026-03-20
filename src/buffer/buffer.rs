@@ -47,6 +47,11 @@ impl Buffer {
         &self.page
     }
 
+    // For in-place modifications
+    pub fn contents_mut(&mut self) -> &mut Page {
+        &mut self.page
+    }
+
     pub fn block_id(&self) -> Option<&BlockId> {
         self.block_id.as_ref()
     }

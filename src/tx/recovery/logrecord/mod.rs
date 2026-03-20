@@ -8,13 +8,12 @@ pub mod start_record;
 use self::set_string_record::SetStringRecord;
 use anyhow::bail;
 
+use crate::buffer::manager::BufferManager;
 use crate::{
     file::Page,
-    tx::{
-        recovery::logrecord::{checkpoint_record::CheckpointRecord, start_record::StartRecord},
-        transaction::Transaction,
-    },
+    tx::recovery::logrecord::{checkpoint_record::CheckpointRecord, start_record::StartRecord},
 };
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, PartialEq)]
 pub enum TxOp {
@@ -33,7 +32,7 @@ pub trait LogRecord {
     // The only record type that doesn't have a tx_num is Checkpoint, and we can just return -1 for it.
     fn tx_num(&self) -> i32;
 
-    fn undo(&self, tx: &mut Transaction);
+    fn undo(&self, ctx: &mut UndoContext) -> anyhow::Result<()>;
 }
 
 pub fn from_page(bytes: &[u8]) -> anyhow::Result<Box<dyn LogRecord>> {
@@ -51,10 +50,13 @@ pub fn from_page(bytes: &[u8]) -> anyhow::Result<Box<dyn LogRecord>> {
     match op {
         TxOp::Checkpoint => Ok(Box::new(CheckpointRecord::new())),
         TxOp::Start => Ok(Box::new(StartRecord::new(page)?)),
-        // TxOp::Commit => Ok(Box::new(CommitRecord::new(page)?)),
-        // TxOp::Rollback => Ok(Box::new(RollbackRecord::new(page)?)),
-        // TxOp::SetI32 => Ok(Box::new(SetI32Record::new(page)?)),
+        TxOp::Commit => Ok(Box::new(commit_record::CommitRecord::new(page)?)),
+        TxOp::Rollback => Ok(Box::new(rollback_record::RollbackRecord::new(page)?)),
+        TxOp::SetI32 => Ok(Box::new(set_i32_record::SetI32Record::new(page)?)),
         TxOp::SetString => Ok(Box::new(SetStringRecord::new(page)?)),
-        _ => bail!("Unsupported log record type: {:?}", op),
     }
+}
+
+pub struct UndoContext {
+    pub buffer_manager: Arc<Mutex<BufferManager>>,
 }

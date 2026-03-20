@@ -6,7 +6,7 @@ use std::{
 use crate::{
     file::{BlockId, Page},
     log::manager::LogManager,
-    tx::{recovery::logrecord::LogRecord, transaction::Transaction},
+    tx::recovery::logrecord::{LogRecord, UndoContext},
 };
 
 pub struct SetI32Record {
@@ -71,9 +71,15 @@ impl LogRecord for SetI32Record {
         self.tx_num
     }
 
-    fn undo(&self, tx: &mut Transaction) {
-        tx.pin(&self.block_id);
-        tx.set_int(&self.block_id, self.offset as usize, self.value, false);
-        tx.unpin(&self.block_id);
+    fn undo(&self, ctx: &mut UndoContext) -> anyhow::Result<()> {
+        let buf_arc = ctx.buffer_manager.lock().unwrap().pin(&self.block_id)?;
+        {
+            let mut buf = buf_arc.lock().unwrap();
+            let p = buf.contents_mut();
+            p.set_integer(self.offset as usize, self.value)?;
+            buf.set_modified(self.tx_num, -1);
+        }
+        ctx.buffer_manager.lock().unwrap().unpin(buf_arc)?;
+        Ok(())
     }
 }

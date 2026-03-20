@@ -3,14 +3,14 @@ use std::sync::{Arc, Mutex};
 use crate::{
     file::Page,
     log::manager::LogManager,
-    tx::recovery::logrecord::{LogRecord, TxOp},
+    tx::recovery::logrecord::{LogRecord, TxOp, UndoContext},
 };
 
 pub struct CommitRecord {
     tx_num: i32,
 }
 impl CommitRecord {
-    fn new(page: Page) -> anyhow::Result<Self> {
+    pub fn new(page: Page) -> anyhow::Result<Self> {
         let tpos = std::mem::size_of::<i32>();
         let tx_num = page.get_integer(tpos)?;
         Ok(CommitRecord { tx_num })
@@ -37,7 +37,7 @@ impl LogRecord for CommitRecord {
         self.tx_num
     }
 
-    fn undo(&self, _tx: &mut crate::tx::transaction::Transaction) {
-        // No undo action needed for commit record.
+    fn undo(&self, _ctx: &mut UndoContext) -> anyhow::Result<()> {
+        Ok(())
     }
 }

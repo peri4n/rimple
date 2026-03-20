@@ -1,6 +1,5 @@
 use std::{
     path::Path,
-    rc::Weak,
     sync::{Arc, Mutex},
 };
 
@@ -18,8 +17,7 @@ use crate::{
 static END_OF_FILE: u64 = 42;
 
 pub struct Transaction {
-    file_manager: Arc<Mutex<FileManager>>,
-    log_manager: Arc<Mutex<LogManager>>,
+    file_manager: Arc<FileManager>,
     buffer_manager: Arc<Mutex<BufferManager>>,
     recovery_manager: Arc<Mutex<RecoveryManager>>,
     concurrency_manager: ConcurrencyManager,
@@ -33,27 +31,22 @@ impl Transaction {
         log_manager: Arc<Mutex<LogManager>>,
         buffer_manager: Arc<Mutex<BufferManager>>,
         tx_num: Arc<Mutex<i32>>,
-
         lock_table: Arc<Mutex<LockTable>>,
     ) -> Self {
         let tx_num = next_tx_num(tx_num);
         let recovery_manager = Arc::new(Mutex::new(RecoveryManager::new(
-            Arc::<Mutex<Transaction>>::new_uninit(),
             tx_num,
             log_manager.clone(),
             buffer_manager.clone(),
         )));
-        let txn = Self {
+        Self {
             file_manager,
-            log_manager,
             buffer_manager: buffer_manager.clone(),
             recovery_manager,
             concurrency_manager: ConcurrencyManager::new(lock_table),
             tx_num,
             buffer_list: BufferList::new(buffer_manager),
-        };
-
-        txn
+        }
     }
 
     pub fn commit(&mut self) -> anyhow::Result<()> {
@@ -67,27 +60,16 @@ impl Transaction {
     }
 
     pub fn rollback(&mut self) -> anyhow::Result<()> {
-        self.recovery_manager
-            .as_ref()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .rollback()?;
+        self.recovery_manager.lock().unwrap().rollback()?;
         self.concurrency_manager.release()?;
         self.buffer_list.unpin_all()?;
-        println!("transaction {} rolled back", self.tx_num);
 
         Ok(())
     }
 
     pub fn recover(&mut self) -> anyhow::Result<()> {
         self.buffer_manager.lock().unwrap().flush_all(self.tx_num)?;
-        self.recovery_manager
-            .as_ref()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .recover()
+        self.recovery_manager.lock().unwrap().recover()
     }
 
     pub fn pin(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
@@ -99,13 +81,13 @@ impl Transaction {
     }
 
     pub fn get_int(&mut self, block_id: &BlockId, offset: usize) -> anyhow::Result<i32> {
-        let mut buff = self
+        let buff = self
             .buffer_list
             .get_buffer(block_id)
             .unwrap()
             .lock()
             .unwrap();
-        buff.contents().get_integer(offset as usize)
+        buff.contents().get_integer(offset)
     }
 
     pub fn set_int(
@@ -124,11 +106,11 @@ impl Transaction {
             .unwrap();
         let mut lsn: i32 = -1;
         if log {
-            let mut rm = self.recovery_manager.as_ref().unwrap().lock().unwrap();
-            lsn = rm.set_i32(&mut buff, offset, value)?.try_into().unwrap();
+            let rm = self.recovery_manager.lock().unwrap();
+            lsn = rm.set_int(&mut buff, offset, value)?.try_into().unwrap();
         }
-        let p = buff.contents();
-        p.set_integer(offset as usize, value)?;
+        let p = buff.contents_mut();
+        p.set_integer(offset, value)?;
         buff.set_modified(self.tx_num, lsn);
 
         Ok(())
@@ -142,7 +124,7 @@ impl Transaction {
             .unwrap()
             .lock()
             .unwrap();
-        buff.contents().get_string(offset as usize)
+        buff.contents().get_string(offset)
     }
 
     pub fn set_string(
@@ -161,11 +143,11 @@ impl Transaction {
             .unwrap();
         let mut lsn: i32 = -1;
         if log {
-            let mut rm = self.recovery_manager.as_ref().unwrap().lock().unwrap();
+            let rm = self.recovery_manager.lock().unwrap();
             lsn = rm.set_string(&mut buff, offset, value)?.try_into().unwrap();
         }
-        let p = buff.contents();
-        p.set_string(offset as usize, value)?;
+        let p = buff.contents_mut();
+        p.set_string(offset , value)?;
         buff.set_modified(self.tx_num, lsn);
 
         Ok(())
@@ -175,18 +157,20 @@ impl Transaction {
         self.buffer_manager.lock().unwrap().available()
     }
 
-    pub fn size(&self, path: &Path) -> usize {
-        todo!()
+    pub fn size(&mut self, path: &Path) -> anyhow::Result<u64> {
+        let dummyblk = BlockId::new(path.to_path_buf(), END_OF_FILE);
+        self.concurrency_manager.s_lock(&dummyblk)?;
+        self.file_manager.size(path)
     }
 
     pub fn append(&mut self, path: &Path) -> anyhow::Result<BlockId> {
         let dummyblk = BlockId::new(path.to_path_buf(), END_OF_FILE);
         self.concurrency_manager.x_lock(&dummyblk)?;
-        self.file_manager.lock().unwrap().append_block(path)
+        self.file_manager.append_block(path)
     }
 
     pub fn block_size(&self) -> usize {
-        self.file_manager.lock().unwrap().block_size()
+        self.file_manager.block_size()
     }
 }
 

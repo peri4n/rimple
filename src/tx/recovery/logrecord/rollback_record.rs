@@ -1,6 +1,10 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{file::Page, log::manager::LogManager, tx::recovery::logrecord::LogRecord};
+use crate::{
+    file::Page,
+    log::manager::LogManager,
+    tx::recovery::logrecord::{LogRecord, UndoContext},
+};
 
 pub struct RollbackRecord {
     tx_num: i32,
@@ -21,7 +25,7 @@ impl RollbackRecord {
         page.set_integer(0, crate::tx::recovery::logrecord::TxOp::Rollback as i32)?;
         page.set_integer(std::mem::size_of::<i32>(), tx_num)?;
 
-        log_manager.lock().unwrap().append(&page.content())
+        log_manager.lock().unwrap().append(page.content())
     }
 }
 
@@ -34,7 +38,7 @@ impl LogRecord for RollbackRecord {
         self.tx_num
     }
 
-    fn undo(&self, _tx: &mut crate::tx::transaction::Transaction) {
-        // No undo action needed for rollback record.
+    fn undo(&self, _ctx: &mut UndoContext) -> anyhow::Result<()> {
+        Ok(())
     }
 }

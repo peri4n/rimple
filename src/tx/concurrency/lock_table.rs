@@ -42,10 +42,11 @@ impl LockTable {
     /// Acquires an exclusive lock on the specified block.
     pub fn x_lock(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
         if let Ok(mut locks) = self.locks.try_lock()
-            && !has_other_s_locks(&locks, block_id) {
-                *locks.entry(block_id.clone()).or_insert(-1) = -1; // means eXclusive lock
-                return Ok(());
-            }
+            && !has_other_s_locks(&locks, block_id)
+        {
+            *locks.entry(block_id.clone()).or_insert(-1) = -1; // means eXclusive lock
+            return Ok(());
+        }
 
         Err(From::from(LockTableError::LockAbort))
     }
@@ -76,8 +77,32 @@ fn has_other_s_locks(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -
     get_lock_val(locks, blk) > 1
 }
 fn get_lock_val(locks: &MutexGuard<HashMap<BlockId, i32>>, blk: &BlockId) -> i32 {
-    match locks.get(&blk) {
+    match locks.get(blk) {
         Some(&ival) => ival,
         None => 0,
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn multiple_shared_locks_are_allowed() {
+        let mut table = LockTable::new();
+        table.s_lock(&BlockId::new("testfile".into(), 1)).unwrap();
+        table.s_lock(&BlockId::new("testfile".into(), 2)).unwrap();
+    }
+
+    #[test]
+    fn exclusive_lock_blocks_other_locks() {
+        let mut table = LockTable::new();
+        table.x_lock(&BlockId::new("testfile".into(), 1)).unwrap();
+        table
+            .s_lock(&BlockId::new("testfile".into(), 1))
+            .unwrap_err();
+        table.unlock(&BlockId::new("testfile".into(), 1)).unwrap();
+        table.s_lock(&BlockId::new("testfile".into(), 1)).unwrap();
     }
 }

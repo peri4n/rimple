@@ -3,10 +3,7 @@ use std::sync::{Arc, Mutex};
 use crate::{
     file::Page,
     log::manager::LogManager,
-    tx::{
-        recovery::logrecord::{LogRecord, TxOp},
-        transaction::Transaction,
-    },
+    tx::recovery::logrecord::{LogRecord, TxOp, UndoContext},
 };
 
 pub struct CheckpointRecord {}
@@ -36,7 +33,7 @@ impl LogRecord for CheckpointRecord {
         -1
     }
 
-    fn undo(&self, tx: &mut Transaction) {
-        // nothing to undo
+    fn undo(&self, _ctx: &mut UndoContext) -> anyhow::Result<()> {
+        Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use log::{debug, trace};
 
@@ -17,24 +17,20 @@ pub struct LogManager {
 }
 
 impl LogManager {
-    pub fn new(file_manager: Arc<FileManager>, log_file: impl Into<PathBuf>) -> io::Result<Self> {
+    pub fn new(
+        file_manager: Arc<FileManager>,
+        log_file: impl Into<PathBuf>,
+    ) -> anyhow::Result<Self> {
         debug!("Start to initialize log manager");
         let log_file = log_file.into();
         let block_size = file_manager.block_size();
         let mut log_page = Page::with_size(block_size);
-        let log_size = file_manager.size(log_file.as_path());
+        let log_size = file_manager.size(log_file.as_path())?;
 
         let current_block = if log_size == 0 {
             trace!("Log file at {:?} is empty. Allocating block.", log_file);
             let blk = file_manager.append_block(log_file.as_path())?;
-            log_page
-                .set_integer(0, file_manager.block_size() as i32)
-                .map_err(|e| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("Failed to reset log page boundary: {e}"),
-                    )
-                })?;
+            log_page.set_integer(0, file_manager.block_size() as i32)?;
             file_manager.write(&blk, &log_page)?;
             blk
         } else {
@@ -56,12 +52,7 @@ impl LogManager {
     }
 
     pub fn append(&mut self, record: &[u8]) -> anyhow::Result<usize> {
-        let mut boundary = self.log_page.get_integer(0).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed to read log page boundary: {e}"),
-            )
-        })? as usize;
+        let mut boundary = self.log_page.get_integer(0)? as usize;
 
         let record_size = record.len();
         let bytes_needed = record_size + std::mem::size_of::<i32>();
@@ -70,27 +61,12 @@ impl LogManager {
             // Not enough space for the record and its size
             self.flush_internal()?;
             self.current_block = self.append_new_block()?;
-            boundary = self.log_page.get_integer(0).map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Failed to read log page boundary after appending new block: {e}"),
-                )
-            })? as usize;
+            boundary = self.log_page.get_integer(0)? as usize;
         }
 
         let rec_pos = boundary - bytes_needed;
-        self.log_page.set_bytes(rec_pos, record).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed to write log record to log page: {e}"),
-            )
-        })?;
-        self.log_page.set_integer(0, rec_pos as i32).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed to update log page boundary: {e}"),
-            )
-        })?;
+        self.log_page.set_bytes(rec_pos, record)?;
+        self.log_page.set_integer(0, rec_pos as i32)?;
         self.latest_lsn += 1;
         Ok(self.latest_lsn)
     }
@@ -109,20 +85,14 @@ impl LogManager {
         Ok(())
     }
 
-    pub fn iter(&self) -> io::Result<LogIterator> {
+    pub(crate) fn iter(&self) -> anyhow::Result<LogIterator> {
         LogIterator::new(self.file_manager.clone(), self.current_block.clone())
     }
 
-    fn append_new_block(&mut self) -> io::Result<BlockId> {
+    fn append_new_block(&mut self) -> anyhow::Result<BlockId> {
         let blk = self.file_manager.append_block(self.log_file.as_path())?;
         self.log_page
-            .set_integer(0, self.file_manager.block_size() as i32)
-            .map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Failed to reset log page boundary: {e}"),
-                )
-            })?;
+            .set_integer(0, self.file_manager.block_size() as i32)?;
         self.file_manager.write(&blk, &self.log_page)?;
         Ok(blk)
     }
@@ -151,7 +121,7 @@ mod test {
     fn print_log_records(log_manager: &LogManager) {
         println!("The log files contains the following records:");
         for entry in log_manager.iter().expect("Failed to create log iterator") {
-            let page = Page::with_bytes(entry);
+            let page = Page::with_bytes(&entry);
             let s = page
                 .get_string(0)
                 .expect("Failed to read string from log record");

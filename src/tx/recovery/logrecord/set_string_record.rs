@@ -6,10 +6,7 @@ use std::{
 use crate::{
     file::{BlockId, Page},
     log::manager::LogManager,
-    tx::{
-        recovery::logrecord::{LogRecord, TxOp},
-        transaction::Transaction,
-    },
+    tx::recovery::logrecord::{LogRecord, TxOp, UndoContext},
 };
 
 pub struct SetStringRecord {
@@ -75,12 +72,16 @@ impl LogRecord for SetStringRecord {
         self.tx_num
     }
 
-    fn undo(&self, tx: &mut Transaction) {
-        tx.pin(&self.block_id);
-
-        // don't log the undo operation, otherwise it will cause an infinite loop of undoing the undo.
-        tx.set_string(&self.block_id, self.offset, &self.value, false);
-        tx.unpin(&self.block_id);
+    fn undo(&self, ctx: &mut UndoContext) -> anyhow::Result<()> {
+        let buf_arc = ctx.buffer_manager.lock().unwrap().pin(&self.block_id)?;
+        {
+            let mut buf = buf_arc.lock().unwrap();
+            let p = buf.contents_mut();
+            p.set_string(self.offset as usize, &self.value)?;
+            buf.set_modified(self.tx_num, -1);
+        }
+        ctx.buffer_manager.lock().unwrap().unpin(buf_arc)?;
+        Ok(())
     }
 }
 

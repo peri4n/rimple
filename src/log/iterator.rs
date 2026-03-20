@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Error},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use crate::file::{BlockId, FileManager, Page};
 
@@ -14,13 +11,11 @@ pub(crate) struct LogIterator {
 }
 
 impl LogIterator {
-    pub fn new(file_manager: Arc<FileManager>, blk: BlockId) -> io::Result<Self> {
+    pub fn new(file_manager: Arc<FileManager>, blk: BlockId) -> anyhow::Result<Self> {
         let block_size = file_manager.block_size();
         let mut page = Page::with_size(block_size);
         file_manager.read(&blk, &mut page)?;
-        let boundary = page
-            .get_integer(0)
-            .map_err(|e| Error::new(io::ErrorKind::InvalidData, e))?;
+        let boundary = page.get_integer(0)?;
         let current_position = boundary as usize;
 
         Ok(Self {
@@ -48,8 +43,8 @@ impl Iterator for LogIterator {
             self.current_position = self.boundary as usize;
         }
 
-        let record = self.page.get_bytes(self.current_position).ok()?;
+        let record = self.page.get_bytes(self.current_position).ok()?.to_vec();
         self.current_position += std::mem::size_of::<i32>() + record.len();
-        Some(record.to_vec())
+        Some(record)
     }
 }

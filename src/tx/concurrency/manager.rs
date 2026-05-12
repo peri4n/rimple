@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{file::BlockId, tx::concurrency::lock_table::LockTable};
+use crate::{file::PageId, tx::concurrency::lock_table::LockTable};
 
 /// Manages locks for a single transaction. Each transaction has its own ConcurrencyManager instance, which keeps track of the locks it holds.
 /// The lock table is shared across all transactions, and the ConcurrencyManager interacts with it to acquire and release locks.
@@ -13,7 +13,7 @@ pub struct ConcurrencyManager {
 
     // TODO: Refactor string here.
     // It should be an enum with variants SharedLock and ExclusiveLock
-    locks: Arc<Mutex<HashMap<BlockId, String>>>,
+    locks: Arc<Mutex<HashMap<PageId, String>>>,
 }
 
 // TODO: Look through
@@ -27,25 +27,25 @@ impl ConcurrencyManager {
         }
     }
 
-    pub fn s_lock(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
+    pub fn s_lock(&mut self, page_id: &PageId) -> anyhow::Result<()> {
         if let Ok(mut locks) = self.locks.try_lock()
-            && !locks.contains_key(block_id)
+            && !locks.contains_key(page_id)
         {
-            self.lock_tbl.lock().unwrap().s_lock(block_id)?;
-            locks.insert(block_id.clone(), "S".to_string());
+            self.lock_tbl.lock().unwrap().s_lock(page_id)?;
+            locks.insert(page_id.clone(), "S".to_string());
         }
 
         Ok(())
     }
 
-    pub fn x_lock(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
-        if !self.has_x_lock(block_id) {
-            self.s_lock(block_id)?;
-            self.lock_tbl.lock().unwrap().x_lock(block_id)?;
+    pub fn x_lock(&mut self, page_id: &PageId) -> anyhow::Result<()> {
+        if !self.has_x_lock(page_id) {
+            self.s_lock(page_id)?;
+            self.lock_tbl.lock().unwrap().x_lock(page_id)?;
             self.locks
                 .lock()
                 .unwrap()
-                .insert(block_id.clone(), "X".to_string());
+                .insert(page_id.clone(), "X".to_string());
         }
 
         Ok(())
@@ -59,8 +59,8 @@ impl ConcurrencyManager {
         Ok(())
     }
 
-    fn has_x_lock(&self, block_id: &BlockId) -> bool {
-        if let Some(lock_type) = self.locks.lock().unwrap().get(block_id) {
+    fn has_x_lock(&self, page_id: &PageId) -> bool {
+        if let Some(lock_type) = self.locks.lock().unwrap().get(page_id) {
             lock_type.eq(&"X")
         } else {
             false

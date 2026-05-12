@@ -21,9 +21,9 @@ mod test {
 
     use crate::db::SimpleDB;
 
-    fn new_test_db(block: usize) -> (tempfile::TempDir, SimpleDB) {
+    fn new_test_db(page_size: usize) -> (tempfile::TempDir, SimpleDB) {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let db = SimpleDB::new(tmp.path(), block).unwrap_or_else(|e| {
+        let db = SimpleDB::new(tmp.path(), page_size).unwrap_or_else(|e| {
             panic!(
                 "Failed to create test database in {} because {}",
                 tmp.path().display(),

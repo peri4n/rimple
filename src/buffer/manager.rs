@@ -9,7 +9,7 @@ use log::{debug, trace};
 
 use crate::{
     buffer::buffer::Buffer,
-    file::{BlockId, FileManager},
+    file::{PageId, FileManager},
     log::manager::LogManager,
 };
 
@@ -56,13 +56,13 @@ impl BufferManager {
         }
     }
 
-    pub fn pin(&mut self, block: &BlockId) -> anyhow::Result<Arc<Mutex<Buffer>>, BufferError> {
-        debug!("Trying to pin block: {}", block);
+    pub fn pin(&mut self, page_id: &PageId) -> anyhow::Result<Arc<Mutex<Buffer>>, BufferError> {
+        debug!("Trying to pin page: {}", page_id);
         let deadline = Instant::now() + Duration::from_millis(self.max_time);
 
         while Instant::now() < deadline {
-            if let Ok(buffer) = self.try_to_pin(block.clone()) {
-                trace!("Pinned block: {}", block);
+            if let Ok(buffer) = self.try_to_pin(page_id.clone()) {
+                trace!("Pinned page: {}", page_id);
                 return Ok(buffer);
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -73,7 +73,7 @@ impl BufferManager {
 
     pub fn unpin(&mut self, buffer: Arc<Mutex<Buffer>>) -> anyhow::Result<()> {
         let mut buffer = buffer.lock().unwrap();
-        debug!("Trying to unpin block: {:?}", buffer.block_id());
+        debug!("Trying to unpin page: {:?}", buffer.page_id());
 
         buffer.unpin();
         if !buffer.is_pinned() {
@@ -100,8 +100,8 @@ impl BufferManager {
         Ok(())
     }
 
-    fn try_to_pin(&mut self, block: BlockId) -> anyhow::Result<Arc<Mutex<Buffer>>> {
-        if let Some(buffer) = self.find_existing_buffer(&block) {
+    fn try_to_pin(&mut self, page_id: PageId) -> anyhow::Result<Arc<Mutex<Buffer>>> {
+        if let Some(buffer) = self.find_existing_buffer(&page_id) {
             let mut locked_buffer = buffer
                 .lock()
                 .map_err(|_| io::Error::other("Failed to acquire buffer lock"))?;
@@ -114,7 +114,7 @@ impl BufferManager {
             let mut locked_buffer = buffer
                 .lock()
                 .map_err(|_| io::Error::other("Failed to acquire buffer lock"))?;
-            locked_buffer.assign_to_block(&block)?;
+            locked_buffer.assign_to_page(&page_id)?;
             self.available -= 1;
             locked_buffer.pin();
             Ok(buffer.clone())
@@ -123,10 +123,10 @@ impl BufferManager {
         }
     }
 
-    fn find_existing_buffer(&self, block: &BlockId) -> Option<Arc<Mutex<Buffer>>> {
+    fn find_existing_buffer(&self, page_id: &PageId) -> Option<Arc<Mutex<Buffer>>> {
         for buffer in &self.pool {
             if let Ok(locked_buffer) = buffer.lock()
-                && locked_buffer.block_id() == Some(block)
+                && locked_buffer.page_id() == Some(page_id)
             {
                 return Some(buffer.clone());
             }

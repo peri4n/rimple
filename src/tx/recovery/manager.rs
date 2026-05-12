@@ -60,13 +60,13 @@ impl RecoveryManager {
         _new_value: i32,
     ) -> anyhow::Result<usize> {
         let old_val = buffer.contents().get_integer(offset)?;
-        let block_id = buffer
-            .block_id()
-            .ok_or_else(|| anyhow!("Buffer is not assigned to a block"))?;
+        let page_id = buffer
+            .page_id()
+            .ok_or_else(|| anyhow!("Buffer is not assigned to a page"))?;
         SetI32Record::write_to_log(
             self.log_manager.clone(),
             self.tx_num,
-            block_id,
+            page_id,
             offset,
             old_val,
         )
@@ -79,13 +79,13 @@ impl RecoveryManager {
         _new_value: &str,
     ) -> anyhow::Result<usize> {
         let old_val = buffer.contents().get_string(offset)?;
-        let block_id = buffer
-            .block_id()
-            .ok_or_else(|| anyhow!("Buffer is not assigned to a block"))?;
+        let page_id = buffer
+            .page_id()
+            .ok_or_else(|| anyhow!("Buffer is not assigned to a page"))?;
         SetStringRecord::write_to_log(
             self.log_manager.clone(),
             self.tx_num,
-            block_id,
+            page_id,
             offset,
             &old_val,
         )

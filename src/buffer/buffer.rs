@@ -4,11 +4,11 @@ use std::{
 };
 
 use crate::{
-    file::{BlockId, FileManager, Page},
+    file::{PageId, FileManager, Page},
     log::manager::LogManager,
 };
 
-/// A buffer is a block of main memory that can hold the contents of a disk block.
+/// A buffer is a page of main memory that can hold the contents of a disk page.
 pub struct Buffer {
     file_manager: Arc<FileManager>,
 
@@ -17,8 +17,8 @@ pub struct Buffer {
     /// The contents of the buffer, represented as a Page.
     page: Page,
 
-    /// The identifier of the disk block currently stored in this buffer, if any.
-    block_id: Option<BlockId>,
+    /// The identifier of the disk page currently stored in this buffer, if any.
+    page_id: Option<PageId>,
 
     /// Number of times this buffer has been pinned (i.e., how many clients are currently using it).
     pins: usize,
@@ -35,8 +35,8 @@ impl Buffer {
         Self {
             file_manager: file_manager.clone(),
             log_manager: log_manager.clone(),
-            page: Page::with_size(file_manager.block_size()),
-            block_id: None,
+            page: Page::with_size(file_manager.page_size()),
+            page_id: None,
             pins: 0,
             txnum: -1,
             lsn: -1,
@@ -52,8 +52,8 @@ impl Buffer {
         &mut self.page
     }
 
-    pub fn block_id(&self) -> Option<&BlockId> {
-        self.block_id.as_ref()
+    pub fn page_id(&self) -> Option<&PageId> {
+        self.page_id.as_ref()
     }
 
     pub fn set_modified(&mut self, txnum: i32, lsn: i32) {
@@ -81,10 +81,10 @@ impl Buffer {
         }
     }
 
-    pub(crate) fn assign_to_block(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
+    pub(crate) fn assign_to_page(&mut self, page_id: &PageId) -> anyhow::Result<()> {
         self.flush()?;
-        self.block_id = Some(block_id.clone());
-        self.file_manager.read(block_id, &mut self.page)?;
+        self.page_id = Some(page_id.clone());
+        self.file_manager.read(page_id, &mut self.page)?;
         self.pins = 0;
 
         Ok(())
@@ -98,7 +98,7 @@ impl Buffer {
                 .map_err(|_| io::Error::other("Failed to acquire log manager lock"))?;
             log_manager.flush(self.lsn as usize)?;
             self.file_manager
-                .write(self.block_id.as_ref().unwrap(), &self.page)?;
+                .write(self.page_id.as_ref().unwrap(), &self.page)?;
         }
 
         Ok(())

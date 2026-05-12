@@ -4,14 +4,14 @@ use std::{
 };
 
 use crate::{
-    file::{BlockId, Page},
+    file::{PageId, Page},
     log::manager::LogManager,
     tx::recovery::logrecord::{LogRecord, UndoContext},
 };
 
 pub struct SetI32Record {
     tx_num: i32,
-    block_id: BlockId,
+    page_id: PageId,
     offset: i32,
     value: i32,
 }
@@ -30,7 +30,7 @@ impl SetI32Record {
         let value = page.get_integer(vpos)?;
         Ok(SetI32Record {
             tx_num,
-            block_id: BlockId::new(file_name.into(), block_num),
+            page_id: PageId::new(file_name.into(), block_num),
             offset,
             value,
         })
@@ -39,13 +39,13 @@ impl SetI32Record {
     pub(crate) fn write_to_log(
         log_manager: Arc<Mutex<LogManager>>,
         tx_num: i32,
-        block_id: &BlockId,
+        page_id: &PageId,
         offset: usize,
         value: i32,
     ) -> anyhow::Result<usize> {
         let tpos = mem::size_of::<i32>();
         let fpos = tpos + mem::size_of::<i32>();
-        let bpos = fpos + Page::max_length(block_id.path().to_str().unwrap()); // the unwrap seams odd
+        let bpos = fpos + Page::max_length(page_id.path().to_str().unwrap()); // the unwrap seams odd
         let opos = bpos + mem::size_of::<i32>();
         let vpos = opos + mem::size_of::<i32>();
         let record_size = vpos + mem::size_of::<i32>();
@@ -53,8 +53,8 @@ impl SetI32Record {
         let mut page = Page::with_size(record_size);
         page.set_integer(0, crate::tx::recovery::logrecord::TxOp::SetI32 as i32)?;
         page.set_integer(tpos, tx_num)?;
-        page.set_string(fpos, block_id.path().to_str().unwrap())?;
-        page.set_integer(bpos, block_id.block_no() as i32)?;
+        page.set_string(fpos, page_id.path().to_str().unwrap())?;
+        page.set_integer(bpos, page_id.block_no() as i32)?;
         page.set_integer(opos, offset as i32)?;
         page.set_integer(vpos, value)?;
 
@@ -72,7 +72,7 @@ impl LogRecord for SetI32Record {
     }
 
     fn undo(&self, ctx: &mut UndoContext) -> anyhow::Result<()> {
-        let buf_arc = ctx.buffer_manager.lock().unwrap().pin(&self.block_id)?;
+        let buf_arc = ctx.buffer_manager.lock().unwrap().pin(&self.page_id)?;
         {
             let mut buf = buf_arc.lock().unwrap();
             let p = buf.contents_mut();

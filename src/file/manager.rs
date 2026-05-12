@@ -9,9 +9,9 @@ use std::{
 
 use log::{debug, trace};
 
-use crate::file::{BlockId, Page};
+use crate::file::{PageId, Page};
 
-/// Manages file I/O operations with caching and block-based access.
+/// Manages file I/O operations with caching and page-based access.
 ///
 /// The `FileManager` provides high-level operations for reading and writing
 /// pages to disk files, with automatic file caching and synchronous I/O
@@ -19,22 +19,22 @@ use crate::file::{BlockId, Page};
 ///
 /// # Features
 ///
-/// - **Block-based access**: All I/O operations work with fixed-size blocks
+/// - **Page-based access**: All I/O operations work with fixed-size pages
 /// - **File caching**: Open files are cached to avoid repeated filesystem calls  
 /// - **Synchronous I/O**: Uses `O_SYNC` flag to ensure data is written to disk
 /// - **Automatic cleanup**: Removes temporary files on initialization
 pub struct FileManager {
-    block_size: usize,
+    page_size: usize,
     open_files: Mutex<HashMap<PathBuf, File>>,
 }
 
 impl FileManager {
-    /// Creates a new file manager for the specified directory and block size.
+    /// Creates a new file manager for the specified directory and page size.
     ///
     /// # Arguments
     ///
     /// * `path` - The directory path where files will be managed
-    /// * `block_size` - The fixed size of each block in bytes
+    /// * `page_size` - The fixed size of each page in bytes
     ///
     /// # Returns
     ///
@@ -43,7 +43,7 @@ impl FileManager {
     /// # Errors
     ///
     /// Returns an I/O error if the directory cannot be created or accessed.
-    pub fn new(path: impl AsRef<Path>, block_size: usize) -> io::Result<Self> {
+    pub fn new(path: impl AsRef<Path>, page_size: usize) -> io::Result<Self> {
         debug!("Start to initialize file manager");
         let path_buf = path.as_ref().to_path_buf();
         let is_new = !path_buf.exists();
@@ -62,7 +62,7 @@ impl FileManager {
 
         debug!("File manager initialization done");
         Ok(Self {
-            block_size,
+            page_size,
             open_files: Mutex::new(HashMap::new()),
         })
     }
@@ -107,19 +107,19 @@ impl FileManager {
         Ok(file)
     }
 
-    /// Reads a page from the specified block.
+    /// Reads a page from the specified page.
     ///
     /// # Arguments
     ///
-    /// * `block_id` - The identifier of the block to read
-    /// * `page` - The page buffer to read into (must be pre-allocated to block size)
+    /// * `page_id` - The identifier of the page to read
+    /// * `page` - The page buffer to read into (must be pre-allocated to page size)
     ///
     /// # Errors
     ///
     /// Returns an I/O error if the file cannot be accessed or read.
-    pub fn read(&self, block_id: &BlockId, page: &mut Page) -> anyhow::Result<()> {
-        let mut file = self.get_file(block_id.path())?;
-        let offset = block_id.block_no() * self.block_size as u64;
+    pub fn read(&self, page_id: &PageId, page: &mut Page) -> anyhow::Result<()> {
+        let mut file = self.get_file(page_id.path())?;
+        let offset = page_id.block_no() * self.page_size as u64;
         file.seek(std::io::SeekFrom::Start(offset))?;
 
         let buf = page.content_mut();
@@ -127,19 +127,19 @@ impl FileManager {
         Ok(())
     }
 
-    /// Writes a page to the specified block.
+    /// Writes a page to the specified page.
     ///
     /// # Arguments
     ///
-    /// * `block_id` - The identifier of the block to write
+    /// * `page_id` - The identifier of the page to write
     /// * `page` - The page data to write
     ///
     /// # Errors
     ///
     /// Returns an I/O error if the file cannot be accessed or written.
-    pub fn write(&self, block_id: &BlockId, page: &Page) -> anyhow::Result<()> {
-        let mut file = self.get_file(block_id.path())?;
-        let offset = block_id.block_no() * self.block_size as u64;
+    pub fn write(&self, page_id: &PageId, page: &Page) -> anyhow::Result<()> {
+        let mut file = self.get_file(page_id.path())?;
+        let offset = page_id.block_no() * self.page_size as u64;
         file.seek(std::io::SeekFrom::Start(offset))?;
 
         let buf = page.content();
@@ -147,7 +147,7 @@ impl FileManager {
         Ok(())
     }
 
-    /// Appends a new empty block to the specified file.
+    /// Appends a new empty page to the specified file.
     ///
     /// # Arguments
     ///
@@ -155,24 +155,24 @@ impl FileManager {
     ///
     /// # Returns
     ///
-    /// Returns the `BlockId` of the newly created block.
+    /// Returns the `PageId` of the newly created page.
     ///
     /// # Errors
     ///
     /// Returns an I/O error if the file cannot be accessed or extended.
-    pub fn append_block(&self, path: &Path) -> anyhow::Result<BlockId> {
-        let new_block_id = BlockId::new(path.to_path_buf(), self.size(path)?);
-        self.write(&new_block_id, &Page::with_size(self.block_size))?;
+    pub fn append_page(&self, path: &Path) -> anyhow::Result<PageId> {
+        let new_page_id = PageId::new(path.to_path_buf(), self.size(path)?);
+        self.write(&new_page_id, &Page::with_size(self.page_size))?;
 
-        Ok(new_block_id)
+        Ok(new_page_id)
     }
 
-    /// Returns the configured block size.
-    pub fn block_size(&self) -> usize {
-        self.block_size
+    /// Returns the configured page size.
+    pub fn page_size(&self) -> usize {
+        self.page_size
     }
 
-    /// Returns the number of blocks in the specified file.
+    /// Returns the number of pages in the specified file.
     ///
     /// # Arguments
     ///
@@ -180,12 +180,12 @@ impl FileManager {
     ///
     /// # Returns
     ///
-    /// The number of blocks, or 0 if the file cannot be accessed.
+    /// The number of pages, or 0 if the file cannot be accessed.
     pub fn size(&self, path: &Path) -> anyhow::Result<u64> {
         self.get_file(path).and_then(|f| {
             f.metadata()
                 .map_err(|e| anyhow::anyhow!("Failed to get meta data of file: {}", e))
-                .map(|m| m.len() / self.block_size as u64)
+                .map(|m| m.len() / self.page_size as u64)
         })
     }
 }
@@ -196,10 +196,10 @@ pub(crate) mod test {
 
     use super::*;
 
-    pub(crate) fn temp_file_manager(block_size: usize) -> (FileManager, TempDir) {
+    pub(crate) fn temp_file_manager(page_size: usize) -> (FileManager, TempDir) {
         let tmp = tempfile::tempdir().expect("Failed to create temp dir");
         (
-            FileManager::new(&tmp, block_size).expect("Failed to create FileManager"),
+            FileManager::new(&tmp, page_size).expect("Failed to create FileManager"),
             tmp,
         )
     }
@@ -210,26 +210,26 @@ pub(crate) mod test {
         let (fm, _) = temp_file_manager(4096);
 
         // test + verify
-        assert_eq!(fm.block_size(), 4096);
+        assert_eq!(fm.page_size(), 4096);
     }
 
     #[test]
-    fn writing_a_single_block_and_reading_it_is_consistent() {
+    fn writing_a_single_page_and_reading_it_is_consistent() {
         // setup
         let (fm, tmp) = temp_file_manager(4096);
         let mut page = Page::with_size(4096);
         page.set_string(0, "Hello, world!").unwrap();
         page.set_integer(100, 42).unwrap();
-        let path = tmp.path().join("blockfile");
-        let block_id = BlockId::new(path.clone(), 0);
+        let path = tmp.path().join("pagefile");
+        let page_id = PageId::new(path.clone(), 0);
 
         // verify
-        assert!(fm.write(&block_id, &page).is_ok());
+        assert!(fm.write(&page_id, &page).is_ok());
         assert_eq!(fm.size(&path).unwrap(), 1);
 
         // test
         let mut read_page = Page::with_size(4096);
-        fm.read(&block_id, &mut read_page).unwrap();
+        fm.read(&page_id, &mut read_page).unwrap();
 
         // verify
         assert_eq!(read_page.get_string(0).unwrap(), "Hello, world!");
@@ -237,16 +237,16 @@ pub(crate) mod test {
     }
 
     #[test]
-    fn appending_blocks_increases_file_size() {
+    fn appending_pages_increases_file_size() {
         // setup
         let (fm, tmp) = temp_file_manager(4096);
         let page = Page::with_size(4096);
         let path = tmp.path().join("appendfile");
-        fm.write(&BlockId::new(path.clone(), 0), &page).unwrap();
+        fm.write(&PageId::new(path.clone(), 0), &page).unwrap();
         assert_eq!(fm.size(&path).unwrap(), 1);
 
         // test
-        assert!(fm.append_block(&path).is_ok());
+        assert!(fm.append_page(&path).is_ok());
 
         // verify
         assert_eq!(fm.size(&path).unwrap(), 2);
@@ -257,10 +257,10 @@ pub(crate) mod test {
         // setup
         let (fm, tmp) = temp_file_manager(4096);
         let path = tmp.path().join("nonexistent");
-        let block_id = BlockId::new(path, 0);
+        let page_id = PageId::new(path, 0);
         let mut page = Page::with_size(4096);
 
         // test + verify
-        assert!(fm.read(&block_id, &mut page).is_err());
+        assert!(fm.read(&page_id, &mut page).is_err());
     }
 }

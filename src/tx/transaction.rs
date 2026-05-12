@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     buffer::manager::BufferManager,
-    file::{BlockId, FileManager},
+    file::{PageId, FileManager},
     log::manager::LogManager,
     tx::{
         bufferlist::BufferList,
@@ -72,18 +72,18 @@ impl Transaction {
         self.recovery_manager.lock().unwrap().recover()
     }
 
-    pub fn pin(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
-        self.buffer_list.pin(block_id)
+    pub fn pin(&mut self, page_id: &PageId) -> anyhow::Result<()> {
+        self.buffer_list.pin(page_id)
     }
 
-    pub fn unpin(&mut self, block_id: &BlockId) -> anyhow::Result<()> {
-        self.buffer_list.unpin(block_id)
+    pub fn unpin(&mut self, page_id: &PageId) -> anyhow::Result<()> {
+        self.buffer_list.unpin(page_id)
     }
 
-    pub fn get_int(&mut self, block_id: &BlockId, offset: usize) -> anyhow::Result<i32> {
+    pub fn get_int(&mut self, page_id: &PageId, offset: usize) -> anyhow::Result<i32> {
         let buff = self
             .buffer_list
-            .get_buffer(block_id)
+            .get_buffer(page_id)
             .unwrap()
             .lock()
             .unwrap();
@@ -92,15 +92,15 @@ impl Transaction {
 
     pub fn set_int(
         &mut self,
-        block_id: &BlockId,
+        page_id: &PageId,
         offset: usize,
         value: i32,
         log: bool,
     ) -> anyhow::Result<()> {
-        self.concurrency_manager.x_lock(block_id)?;
+        self.concurrency_manager.x_lock(page_id)?;
         let mut buff = self
             .buffer_list
-            .get_buffer(block_id)
+            .get_buffer(page_id)
             .unwrap()
             .lock()
             .unwrap();
@@ -116,11 +116,11 @@ impl Transaction {
         Ok(())
     }
 
-    pub fn get_string(&mut self, block_id: &BlockId, offset: usize) -> anyhow::Result<String> {
-        self.concurrency_manager.s_lock(block_id)?;
+    pub fn get_string(&mut self, page_id: &PageId, offset: usize) -> anyhow::Result<String> {
+        self.concurrency_manager.s_lock(page_id)?;
         let buff = self
             .buffer_list
-            .get_buffer(block_id)
+            .get_buffer(page_id)
             .unwrap()
             .lock()
             .unwrap();
@@ -129,15 +129,15 @@ impl Transaction {
 
     pub fn set_string(
         &mut self,
-        block_id: &BlockId,
+        page_id: &PageId,
         offset: usize,
         value: &str,
         log: bool,
     ) -> anyhow::Result<()> {
-        self.concurrency_manager.x_lock(block_id)?;
+        self.concurrency_manager.x_lock(page_id)?;
         let mut buff = self
             .buffer_list
-            .get_buffer(block_id)
+            .get_buffer(page_id)
             .unwrap()
             .lock()
             .unwrap();
@@ -158,19 +158,19 @@ impl Transaction {
     }
 
     pub fn size(&mut self, path: &Path) -> anyhow::Result<u64> {
-        let dummyblk = BlockId::new(path.to_path_buf(), END_OF_FILE);
+        let dummyblk = PageId::new(path.to_path_buf(), END_OF_FILE);
         self.concurrency_manager.s_lock(&dummyblk)?;
         self.file_manager.size(path)
     }
 
-    pub fn append(&mut self, path: &Path) -> anyhow::Result<BlockId> {
-        let dummyblk = BlockId::new(path.to_path_buf(), END_OF_FILE);
+    pub fn append(&mut self, path: &Path) -> anyhow::Result<PageId> {
+        let dummyblk = PageId::new(path.to_path_buf(), END_OF_FILE);
         self.concurrency_manager.x_lock(&dummyblk)?;
-        self.file_manager.append_block(path)
+        self.file_manager.append_page(path)
     }
 
-    pub fn block_size(&self) -> usize {
-        self.file_manager.block_size()
+    pub fn page_size(&self) -> usize {
+        self.file_manager.page_size()
     }
 }
 

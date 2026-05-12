@@ -1,6 +1,6 @@
 use anyhow::Error;
 
-/// A page represents a fixed-size block of bytes that can be read from or written to disk.
+/// A page represents a fixed-size page of bytes that can be read from or written to disk.
 ///
 /// Pages provide methods to store and retrieve various data types in a binary format
 /// suitable for persistence. All multi-byte values use big-endian byte ordering.

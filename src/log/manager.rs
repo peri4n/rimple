@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use log::{debug, trace};
 
 use crate::{
-    file::{BlockId, FileManager, Page},
+    file::{PageId, FileManager, Page},
     log::iterator::LogIterator,
 };
 
@@ -11,7 +11,7 @@ pub struct LogManager {
     file_manager: Arc<FileManager>,
     log_file: PathBuf,
     log_page: Page,
-    current_block: BlockId,
+    current_page: PageId,
     latest_lsn: usize,
     latest_saved_lsn: usize,
 }
@@ -23,21 +23,21 @@ impl LogManager {
     ) -> anyhow::Result<Self> {
         debug!("Start to initialize log manager");
         let log_file = log_file.into();
-        let block_size = file_manager.block_size();
-        let mut log_page = Page::with_size(block_size);
+        let page_size = file_manager.page_size();
+        let mut log_page = Page::with_size(page_size);
         let log_size = file_manager.size(log_file.as_path())?;
 
-        let current_block = if log_size == 0 {
-            trace!("Log file at {:?} is empty. Allocating block.", log_file);
-            let blk = file_manager.append_block(log_file.as_path())?;
-            log_page.set_integer(0, file_manager.block_size() as i32)?;
+        let current_page = if log_size == 0 {
+            trace!("Log file at {:?} is empty. Allocating page.", log_file);
+            let blk = file_manager.append_page(log_file.as_path())?;
+            log_page.set_integer(0, file_manager.page_size() as i32)?;
             file_manager.write(&blk, &log_page)?;
             blk
         } else {
             trace!("Log file at {:?} already exists.", log_file);
-            let block = BlockId::new(log_file.clone(), log_size - 1);
-            file_manager.read(&block, &mut log_page)?;
-            block
+            let page = PageId::new(log_file.clone(), log_size - 1);
+            file_manager.read(&page, &mut log_page)?;
+            page
         };
 
         debug!("Log manager initialization done");
@@ -45,7 +45,7 @@ impl LogManager {
             file_manager,
             log_file,
             log_page,
-            current_block,
+            current_page,
             latest_lsn: 0,
             latest_saved_lsn: 0,
         })
@@ -60,7 +60,7 @@ impl LogManager {
         if boundary < std::mem::size_of::<i32>() + bytes_needed {
             // Not enough space for the record and its size
             self.flush_internal()?;
-            self.current_block = self.append_new_block()?;
+            self.current_page = self.append_new_page()?;
             boundary = self.log_page.get_integer(0)? as usize;
         }
 
@@ -80,19 +80,19 @@ impl LogManager {
 
     fn flush_internal(&mut self) -> anyhow::Result<()> {
         self.file_manager
-            .write(&self.current_block, &self.log_page)?;
+            .write(&self.current_page, &self.log_page)?;
         self.latest_saved_lsn = self.latest_lsn;
         Ok(())
     }
 
     pub(crate) fn iter(&self) -> anyhow::Result<LogIterator> {
-        LogIterator::new(self.file_manager.clone(), self.current_block.clone())
+        LogIterator::new(self.file_manager.clone(), self.current_page.clone())
     }
 
-    fn append_new_block(&mut self) -> anyhow::Result<BlockId> {
-        let blk = self.file_manager.append_block(self.log_file.as_path())?;
+    fn append_new_page(&mut self) -> anyhow::Result<PageId> {
+        let blk = self.file_manager.append_page(self.log_file.as_path())?;
         self.log_page
-            .set_integer(0, self.file_manager.block_size() as i32)?;
+            .set_integer(0, self.file_manager.page_size() as i32)?;
         self.file_manager.write(&blk, &self.log_page)?;
         Ok(blk)
     }
@@ -105,8 +105,8 @@ mod test {
 
     use super::*;
 
-    fn temp_log_manager(block_size: usize) -> (LogManager, TempDir) {
-        let (fm, tmp) = crate::file::manager::test::temp_file_manager(block_size);
+    fn temp_log_manager(page_size: usize) -> (LogManager, TempDir) {
+        let (fm, tmp) = crate::file::manager::test::temp_file_manager(page_size);
         (
             LogManager::new(Arc::new(fm), tmp.path().join("logfile"))
                 .expect("Failed to create LogManager"),
@@ -137,7 +137,7 @@ mod test {
     }
 
     #[test]
-    fn append_and_iter_single_block() {
+    fn append_and_iter_single_page() {
         let (mut lm, _) = temp_log_manager(4096);
         let mut last_lsn = 0;
         for i in 1..=5 {
@@ -162,10 +162,10 @@ mod test {
     }
 
     #[test]
-    fn append_across_blocks_iterates_newest_block_first() {
+    fn append_across_pages_iterates_newest_page_first() {
         let (mut lm, _) = temp_log_manager(128);
 
-        // Each record ~18 bytes in block; 6 fit in 128 -> force 2 blocks with 12 records
+        // Each record ~18 bytes in page; 6 fit in 128 -> force 2 pages with 12 records
         let mut last_lsn = 0;
         for i in 1..=12 {
             last_lsn = lm

@@ -15,13 +15,13 @@ pub struct SimpleDB {
 impl SimpleDB {
     pub const LOG_FILE: &'static str = "simpledb.log";
 
-    pub fn new(dirname: impl AsRef<Path>, block_size: usize) -> anyhow::Result<Self> {
+    pub fn new(dirname: impl AsRef<Path>, page_size: usize) -> anyhow::Result<Self> {
         info!(
-            "Start to initialize the database in folder {:?} with block size {}",
+            "Start to initialize the database in folder {:?} with page size {}",
             dirname.as_ref(),
-            block_size
+            page_size
         );
-        let file_manager = Arc::new(FileManager::new(&dirname, block_size)?);
+        let file_manager = Arc::new(FileManager::new(&dirname, page_size)?);
         let log_manager = Arc::new(Mutex::new(LogManager::new(
             file_manager.clone(),
             dirname.as_ref().join(Self::LOG_FILE),
